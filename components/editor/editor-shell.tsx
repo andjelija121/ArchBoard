@@ -15,22 +15,26 @@ interface EditorShellProps {
  */
 export function EditorShell({ children }: EditorShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false)
+  const sidebarToggleRef = React.useRef<HTMLButtonElement>(null)
+
+  const handleCloseSidebar = () => {
+    setIsSidebarOpen(false)
+    sidebarToggleRef.current?.focus()
+  }
 
   return (
     <div className="flex h-full flex-1 flex-col">
       <EditorNavbar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
+        sidebarToggleRef={sidebarToggleRef}
       />
 
       <div className="relative flex-1 overflow-hidden bg-background">
         {children}
       </div>
 
-      <ProjectSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+      <ProjectSidebar isOpen={isSidebarOpen} onClose={handleCloseSidebar} />
     </div>
   )
 }

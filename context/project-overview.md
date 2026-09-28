@@ -51,7 +51,7 @@ ArchBoard is a real-time collaborative whiteboarding application designed for so
 * Clerk authentication for project creators/owners.
 * PostgreSQL database (managed via Prisma ORM) for saving user metadata, board metadata, and canvas JSON state.
 * Liveblocks integration for multiplayer web-socket synchronization.
-* AI block generation (append-only) via Trigger.dev and OpenAI/Anthropic.
+* AI block generation (append-only) via Trigger.dev and Google Gemini.
 * 6 core smart block types: Client, Compute, Database, Cache, Queue/Broker, Load Balancer.
 
 ### Out of Scope

@@ -35,7 +35,7 @@
 ## AI and Background Task Model
 
 * User prompts from the chat sidebar are sent to a Next.js Server Action, which immediately hands the payload off to a Trigger.dev background job and returns a job ID to the client.
-* Trigger.dev orchestrates the call to the LLM (OpenAI) using strict Structured Outputs to guarantee a JSON payload that matches the React Flow node schema.
+* Trigger.dev orchestrates the call to the LLM (Google Gemini) using strict Structured Outputs to guarantee a JSON payload that matches the React Flow node schema.
 * The AI assigns a `category` (e.g., "Gateway", "Database") to each generated node. The frontend UI uses this category to calculate the X-coordinate for "swimlane" spawning, eliminating the need for complex auto-layout algorithms.
 
 ## Invariants
