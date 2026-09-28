@@ -16,6 +16,12 @@ interface ProjectSidebarProps {
   onClose: () => void
 }
 
+/**
+ * Renders placeholder project tabs, initially selecting My Projects, and a
+ * New Project button with no action yet. When isOpen is false, the panel stays
+ * mounted offscreen with aria-hidden set. The close button calls onClose;
+ * the parent controls visibility.
+ */
 export function ProjectSidebar({ isOpen, onClose }: ProjectSidebarProps) {
   return (
     <aside

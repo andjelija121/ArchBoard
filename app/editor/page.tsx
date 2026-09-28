@@ -1,5 +1,6 @@
 import { EditorShell } from "@/components/editor/editor-shell"
 
+/** Renders the editor shell with a placeholder for the unfinished canvas. */
 export default function EditorPage() {
   return (
     <EditorShell>

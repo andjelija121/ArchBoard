@@ -18,6 +18,7 @@ export const metadata: Metadata = {
   description: "ArchBoard",
 };
 
+/** Wraps page content in the English document with the dark theme and app fonts. */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html

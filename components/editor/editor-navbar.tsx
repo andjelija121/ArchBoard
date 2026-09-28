@@ -11,6 +11,10 @@ interface EditorNavbarProps {
   className?: string
 }
 
+/**
+ * Renders the editor navigation with a sidebar toggle reflecting isSidebarOpen.
+ * Clicking the toggle calls onToggleSidebar; the parent controls sidebar state.
+ */
 export function EditorNavbar({
   isSidebarOpen,
   onToggleSidebar,
