@@ -26,7 +26,12 @@ export function useProjectDialogs() {
   const [name, setName] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
+  const submissionVersionRef = React.useRef(0)
+  const isSubmittingRef = React.useRef(false)
+
   const closeDialog = React.useCallback(() => {
+    submissionVersionRef.current += 1
+    isSubmittingRef.current = false
     setDialog(null)
     setActiveProject(null)
     setName("")
@@ -54,10 +59,15 @@ export function useProjectDialogs() {
 
   const submitCreate = React.useCallback(async () => {
     const trimmed = name.trim()
-    if (!trimmed) return
+    if (!trimmed || isSubmittingRef.current) return
 
+    isSubmittingRef.current = true
     setIsSubmitting(true)
+    submissionVersionRef.current += 1
+    const version = submissionVersionRef.current
+
     await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
+    if (submissionVersionRef.current !== version) return
 
     const project: MockProject = {
       id: `proj-${Date.now()}`,
@@ -71,10 +81,15 @@ export function useProjectDialogs() {
 
   const submitRename = React.useCallback(async () => {
     const trimmed = name.trim()
-    if (!trimmed || !activeProject) return
+    if (!trimmed || !activeProject || isSubmittingRef.current) return
 
+    isSubmittingRef.current = true
     setIsSubmitting(true)
+    submissionVersionRef.current += 1
+    const version = submissionVersionRef.current
+
     await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
+    if (submissionVersionRef.current !== version) return
 
     setOwnedProjects((projects) =>
       projects.map((project) =>
@@ -87,10 +102,15 @@ export function useProjectDialogs() {
   }, [name, activeProject, closeDialog])
 
   const submitDelete = React.useCallback(async () => {
-    if (!activeProject) return
+    if (!activeProject || isSubmittingRef.current) return
 
+    isSubmittingRef.current = true
     setIsSubmitting(true)
+    submissionVersionRef.current += 1
+    const version = submissionVersionRef.current
+
     await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
+    if (submissionVersionRef.current !== version) return
 
     setOwnedProjects((projects) =>
       projects.filter((project) => project.id !== activeProject.id)
