@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
+import { dark } from "@clerk/ui/themes";
 import { IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -20,12 +22,32 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${ibmPlexSans.variable} ${jetBrainsMono.variable} dark h-full antialiased`}
-      suppressHydrationWarning
+    <ClerkProvider
+      appearance={{
+        theme: dark,
+        variables: {
+          colorPrimary: "var(--accent-primary)",
+          colorBackground: "var(--bg-elevated)",
+          colorForeground: "var(--text-primary)",
+          colorMutedForeground: "var(--text-muted)",
+          colorInput: "var(--bg-surface)",
+          colorInputForeground: "var(--text-primary)",
+          colorBorder: "var(--border-default)",
+          colorDanger: "var(--state-error)",
+          colorSuccess: "var(--state-success)",
+          colorWarning: "var(--state-warning)",
+          borderRadius: "var(--radius)",
+          fontFamily: "var(--font-sans)",
+        },
+      }}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
-    </html>
+      <html
+        lang="en"
+        className={`${ibmPlexSans.variable} ${jetBrainsMono.variable} dark h-full antialiased`}
+        suppressHydrationWarning
+      >
+        <body className="min-h-full flex flex-col">{children}</body>
+      </html>
+    </ClerkProvider>
   );
 }
