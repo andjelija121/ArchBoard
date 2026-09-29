@@ -1,18 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSignUp } from "@clerk/nextjs"
 import { Eye, EyeOff, Lock, Mail } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getClerkErrorMessage } from "@/components/auth/clerk-error"
+import { getSafeRedirectUrl } from "@/components/auth/redirect-url"
 import { SocialButtons } from "@/components/auth/social-buttons"
 
 export function SignUpForm() {
   const { signUp } = useSignUp()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const destination = getSafeRedirectUrl(searchParams.get("redirect_url"))
 
   const [step, setStep] = React.useState<"details" | "verify">("details")
   const [email, setEmail] = React.useState("")
@@ -49,6 +52,15 @@ export function SignUpForm() {
     }
   }
 
+  async function finalizeAndNavigate() {
+    const { error: finalizeError } = await signUp.finalize()
+    if (finalizeError) {
+      setError(getClerkErrorMessage(finalizeError))
+      return
+    }
+    router.push(destination)
+  }
+
   async function handleVerify(event: React.FormEvent) {
     event.preventDefault()
     if (submitting) return
@@ -63,8 +75,15 @@ export function SignUpForm() {
         return
       }
       if (signUp.status === "complete") {
-        await signUp.finalize()
-        router.push("/editor")
+        await finalizeAndNavigate()
+        return
+      }
+      if (signUp.status === "missing_requirements") {
+        // The code was valid — the account just needs more info than this
+        // form collects (e.g. name fields required in the Clerk dashboard).
+        setError(
+          `Your email is verified, but a few more details are needed to finish: ${signUp.missingFields.join(", ")}.`
+        )
         return
       }
       setError("That code didn't work. Check your email and try again.")
@@ -78,14 +97,13 @@ export function SignUpForm() {
   async function handleOAuth(strategy: "oauth_google" | "oauth_github") {
     if (submitting) return
     setError(null)
-    try {
-      await signUp.sso({
-        strategy,
-        redirectUrl: "/editor",
-        redirectCallbackUrl: "/sso-callback",
-      })
-    } catch (err) {
-      setError(getClerkErrorMessage(err))
+    const { error: ssoError } = await signUp.sso({
+      strategy,
+      redirectUrl: destination,
+      redirectCallbackUrl: "/sso-callback",
+    })
+    if (ssoError) {
+      setError(getClerkErrorMessage(ssoError))
     }
   }
 

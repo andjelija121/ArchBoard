@@ -8,6 +8,8 @@ export default function SSOCallbackPage() {
         signInFallbackRedirectUrl="/editor"
         signUpFallbackRedirectUrl="/editor"
       />
+      {/* Clerk's bot protection mounts here for OAuth-triggered sign-ups */}
+      <div id="clerk-captcha" data-cl-theme="dark" />
     </div>
   )
 }

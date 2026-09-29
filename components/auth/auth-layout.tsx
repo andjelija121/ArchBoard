@@ -1,8 +1,12 @@
+"use client"
+
 import * as React from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Boxes, Globe, User } from "lucide-react"
 
 import { AuthTestimonial } from "@/components/auth/auth-testimonial"
+import { getSafeRedirectUrl } from "@/components/auth/redirect-url"
 
 interface AuthLayoutProps {
   /** Centered heading above the form, e.g. "Login to your account". */
@@ -33,6 +37,15 @@ export function AuthLayout({
   altHref,
   children,
 }: AuthLayoutProps) {
+  const searchParams = useSearchParams()
+  const redirectUrl = searchParams.get("redirect_url")
+  // Carry a validated return destination across the sign-in/sign-up switch
+  // link, so a guest bounced here from a protected route (e.g. /editor) ends
+  // up back there after using the other form.
+  const switchHref = redirectUrl
+    ? `${altHref}?redirect_url=${encodeURIComponent(getSafeRedirectUrl(redirectUrl))}`
+    : altHref
+
   return (
     <div className="grid h-svh overflow-hidden lg:grid-cols-2">
       <div className="flex flex-col overflow-y-auto px-6 py-6 sm:px-10">
@@ -51,7 +64,7 @@ export function AuthLayout({
               {altPrompt}
             </span>
             <Link
-              href={altHref}
+              href={switchHref}
               className="rounded-md border border-border px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-accent"
             >
               {altLabel}
