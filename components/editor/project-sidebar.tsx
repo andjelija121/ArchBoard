@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Pencil, Plus, Trash2, X } from "lucide-react"
 import { cn } from "cn"
 
@@ -93,9 +94,13 @@ export function ProjectSidebar({
                     key={project.id}
                     className="group flex items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted"
                   >
-                    <span className="flex-1 truncate text-sm text-foreground">
+                    <Link
+                      href={`/editor/${project.id}`}
+                      onClick={onClose}
+                      className="flex-1 truncate rounded-sm text-sm text-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                    >
                       {project.name}
-                    </span>
+                    </Link>
                     <Button
                       variant="ghost"
                       size="icon-xs"

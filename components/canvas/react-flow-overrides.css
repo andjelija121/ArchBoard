@@ -1,0 +1,12 @@
+/* React Flow theming: map its variables onto the app's design tokens. */
+.react-flow {
+  --xy-background-color: var(--bg-base);
+  --xy-background-pattern-dots-color: var(--border-strong);
+  --xy-controls-button-background-color: var(--bg-surface);
+  --xy-controls-button-background-color-hover: var(--bg-elevated);
+  --xy-controls-button-color: var(--text-muted);
+  --xy-controls-button-color-hover: var(--text-primary);
+  --xy-controls-button-border-color: var(--border-default);
+  --xy-connectionline-stroke: var(--accent-primary);
+  --xy-selection-border: 1px solid var(--accent-primary);
+}

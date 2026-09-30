@@ -52,7 +52,7 @@
   **real** query (empty for now). Enforce `ownerId === auth().userId` on every
   mutation. No React Flow yet.
 
-### Unit 7 — Board route + React Flow canvas scaffold + snapshot save/load
+### Unit 7 — Board route + React Flow canvas scaffold + snapshot save/load  →  spec: `07-board-canvas.md`
 - **Builds:** A per-project route (e.g. `/editor/[projectId]`) that mounts an
   empty React Flow canvas inside the existing editor chrome. Top bar shows the
   project title + a save-status indicator and a manual **Save** button. A
@@ -62,7 +62,9 @@
   zoom) → click Save → reload → the (empty) board loads back from Postgres.
 - **Boundary:** `components/canvas/` + `app/` (route + save/load Server Action).
 - **Depends on:** Unit 6 (a real project to open).
-- **Introduces (just in time):** `reactflow`.
+- **Introduces (just in time):** `@xyflow/react` (React Flow v12 — the current
+  package; the v11 `reactflow` package peer-deps on React 18 and won't install
+  cleanly on this project's React 19.2 / Next 16).
 - **✅ Storage resolved:** the `Project.canvas` JSONB column exists (migration
   `20260930165407_canvas_jsonb` dropped the old `canvasJsonPath` blob pointer
   and added `canvas Json?`), matching `architecture.md` invariant #4. This unit
