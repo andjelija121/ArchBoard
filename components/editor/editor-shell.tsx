@@ -11,32 +11,39 @@ import {
   RenameProjectDialog,
 } from "@/components/editor/project-dialogs"
 import { useProjectDialogs } from "@/components/editor/use-project-dialogs"
-import { sharedProjects } from "@/lib/mock-projects"
+import type { ProjectListItem } from "@/lib/projects"
 
 interface EditorShellRenderProps {
   onNewProject: () => void
 }
 
 interface EditorShellProps {
+  ownedProjects: ProjectListItem[]
+  sharedProjects: ProjectListItem[]
   children?: (props: EditorShellRenderProps) => React.ReactNode
 }
 
 /**
  * Base chrome shared by every editor screen: top navbar + floating
  * project sidebar. Owns the open/closed state the two components share,
- * plus the create/rename/delete project dialog flow (mock data only).
+ * plus the create/rename/delete project dialog flow. Project lists are
+ * loaded on the server and passed in.
  */
-export function EditorShell({ children }: EditorShellProps) {
+export function EditorShell({
+  ownedProjects,
+  sharedProjects,
+  children,
+}: EditorShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false)
   const sidebarToggleRef = React.useRef<HTMLButtonElement>(null)
 
   const {
-    ownedProjects,
     dialog,
     activeProject,
     name,
     setName,
     slugPreview,
+    error,
     isSubmitting,
     openCreateDialog,
     openRenameDialog,
@@ -82,6 +89,7 @@ export function EditorShell({ children }: EditorShellProps) {
         open={dialog === "create"}
         name={name}
         slugPreview={slugPreview}
+        error={error}
         isSubmitting={isSubmitting}
         onNameChange={setName}
         onOpenChange={(open) => (open ? openCreateDialog() : closeDialog())}
@@ -92,6 +100,7 @@ export function EditorShell({ children }: EditorShellProps) {
         open={dialog === "rename"}
         project={activeProject}
         name={name}
+        error={error}
         isSubmitting={isSubmitting}
         onNameChange={setName}
         onOpenChange={(open) => {
@@ -103,6 +112,7 @@ export function EditorShell({ children }: EditorShellProps) {
       <DeleteProjectDialog
         open={dialog === "delete"}
         project={activeProject}
+        error={error}
         isSubmitting={isSubmitting}
         onOpenChange={(open) => {
           if (!open) closeDialog()

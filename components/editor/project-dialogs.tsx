@@ -5,12 +5,22 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DialogPattern } from "@/components/editor/dialog-pattern"
-import type { MockProject } from "@/lib/mock-projects"
+import type { ProjectListItem } from "@/lib/projects"
+
+function ErrorLine({ error }: { error?: string | null }) {
+  if (!error) return null
+  return (
+    <p role="alert" className="text-xs text-destructive">
+      {error}
+    </p>
+  )
+}
 
 interface CreateProjectDialogProps {
   open: boolean
   name: string
   slugPreview: string
+  error?: string | null
   isSubmitting: boolean
   onNameChange: (name: string) => void
   onOpenChange: (open: boolean) => void
@@ -21,6 +31,7 @@ export function CreateProjectDialog({
   open,
   name,
   slugPreview,
+  error,
   isSubmitting,
   onNameChange,
   onOpenChange,
@@ -62,6 +73,7 @@ export function CreateProjectDialog({
         <p className="text-xs text-muted-foreground">
           {slugPreview ? `/${slugPreview}` : "Enter a name to preview the slug."}
         </p>
+        <ErrorLine error={error} />
       </form>
     </DialogPattern>
   )
@@ -69,8 +81,9 @@ export function CreateProjectDialog({
 
 interface RenameProjectDialogProps {
   open: boolean
-  project: MockProject | null
+  project: ProjectListItem | null
   name: string
+  error?: string | null
   isSubmitting: boolean
   onNameChange: (name: string) => void
   onOpenChange: (open: boolean) => void
@@ -81,6 +94,7 @@ export function RenameProjectDialog({
   open,
   project,
   name,
+  error,
   isSubmitting,
   onNameChange,
   onOpenChange,
@@ -109,6 +123,7 @@ export function RenameProjectDialog({
       }
     >
       <form
+        className="flex flex-col gap-2"
         onSubmit={(event) => {
           event.preventDefault()
           onSubmit()
@@ -120,6 +135,7 @@ export function RenameProjectDialog({
           value={name}
           onChange={(event) => onNameChange(event.target.value)}
         />
+        <ErrorLine error={error} />
       </form>
     </DialogPattern>
   )
@@ -127,7 +143,8 @@ export function RenameProjectDialog({
 
 interface DeleteProjectDialogProps {
   open: boolean
-  project: MockProject | null
+  project: ProjectListItem | null
+  error?: string | null
   isSubmitting: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: () => void
@@ -136,6 +153,7 @@ interface DeleteProjectDialogProps {
 export function DeleteProjectDialog({
   open,
   project,
+  error,
   isSubmitting,
   onOpenChange,
   onSubmit,
@@ -164,6 +182,8 @@ export function DeleteProjectDialog({
           </Button>
         </>
       }
-    />
+    >
+      <ErrorLine error={error} />
+    </DialogPattern>
   )
 }

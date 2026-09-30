@@ -10,16 +10,16 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-import type { MockProject } from "@/lib/mock-projects"
+import type { ProjectListItem } from "@/lib/projects"
 
 interface ProjectSidebarProps {
   isOpen: boolean
   onClose: () => void
-  ownedProjects: MockProject[]
-  sharedProjects: MockProject[]
+  ownedProjects: ProjectListItem[]
+  sharedProjects: ProjectListItem[]
   onCreateProject: () => void
-  onRenameProject: (project: MockProject) => void
-  onDeleteProject: (project: MockProject) => void
+  onRenameProject: (project: ProjectListItem) => void
+  onDeleteProject: (project: ProjectListItem) => void
 }
 
 export function ProjectSidebar({

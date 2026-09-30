@@ -19,7 +19,7 @@ ArchBoard is a real-time collaborative whiteboarding application designed for so
 5. The UI automatically spawns the requested blocks into predefined horizontal "swimlanes" (e.g., Gateways on the left, Databases on the right) without overlapping.
 6. User clicks and drags to draw connection edges between the spawned blocks.
 7. User clicks a connection edge to open a properties panel, defining the protocol (e.g., REST, WebSocket), sync/async behavior, and primary API routes/load estimations.
-8. User clicks "Share" to generate a URL, sends it to a peer, and the peer joins instantly as a guest editor to modify the board in real-time.
+8. User clicks "Share", chooses a role (view or edit), and generates a revocable share link; they send it to a peer, who joins instantly as an anonymous guest (editor or read-only, per the link) to view or modify the board in real-time. The owner can revoke the link at any time.
 9. The board owner clicks save (or auto-saves), storing the Liveblocks canvas state into a PostgreSQL `JSONB` column via Prisma.
 
 ## Features
@@ -40,7 +40,7 @@ ArchBoard is a real-time collaborative whiteboarding application designed for so
 ### Collaboration & Data
 
 * **Multiplayer Engine:** Liveblocks-powered real-time cursor tracking and component state synchronization.
-* **Frictionless Guest Access:** URL-based sharing that grants instant "Editor" permissions without requiring the guest to create an account.
+* **Revocable Share Links:** Token-based sharing that grants instant guest access without requiring an account. Each link carries a role — view (read-only) or edit — and the owner can revoke it at any time. Access is via the share token, never the raw board id.
 * **Persistent State Storage:** Saving of canvas JSON state in a PostgreSQL database using Prisma.
 
 ## Scope

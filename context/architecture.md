@@ -30,7 +30,7 @@
 
 * **Authentication**: Board creators (owners) must authenticate via Clerk using GitHub or Google.
 * **Ownership**: Every project board has a single owner, enforced by a `user_id` foreign key in the database.
-* **Frictionless Access Control**: Anyone with the unique board URL instantly joins as an anonymous "Guest Editor". Guests have full permission to spawn blocks, move nodes, and edit edge properties in real-time. Only the authenticated owner has the authority to permanently delete the board from the database.
+* **Frictionless Share Links**: The owner shares a board by generating a **revocable share link** carrying a random, unguessable token (not the raw board id). Each link has a **role**: `VIEW` (read-only) or `EDIT`. A guest opening an `EDIT` link joins instantly as an anonymous editor (spawn blocks, move nodes, edit edge properties in real-time) with **no account required**; a `VIEW` link is read-only. The owner can **revoke** any link at any time, immediately cutting off access. Only the authenticated owner can permanently delete the board. The board route is not publicly reachable by its id alone — anonymous access is granted only through an active share token.
 
 ## AI and Background Task Model
 

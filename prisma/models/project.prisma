@@ -1,0 +1,37 @@
+enum ProjectStatus {
+  DRAFT
+  ARCHIVED
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  ownerId        String        @map("owner_id")
+  name           String
+  slug           String
+  description    String?
+  status         ProjectStatus @default(DRAFT)
+  canvas         Json?         @map("canvas") @db.JsonB
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  collaborators ProjectCollaborator[]
+
+  @@unique([ownerId, slug])
+  @@index([ownerId])
+  @@index([createdAt])
+  @@map("projects")
+}
+
+model ProjectCollaborator {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  collaboratorEmail String   @map("collaborator_email")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, collaboratorEmail])
+  @@index([collaboratorEmail])
+  @@index([projectId, createdAt])
+  @@map("project_collaborators")
+}

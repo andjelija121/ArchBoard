@@ -1,130 +1,110 @@
 import * as React from "react"
 
 import {
-  initialOwnedProjects,
-  slugify,
-  type MockProject,
-} from "@/lib/mock-projects"
+  createProject,
+  deleteProject,
+  renameProject,
+} from "@/app/editor/actions"
+import { slugify, type ProjectListItem } from "@/lib/projects"
 
 type DialogKind = "create" | "rename" | "delete" | null
 
-const MOCK_LATENCY_MS = 400
-
 /**
- * Owns dialog state, form state, and loading state for the create /
- * rename / delete project flows. Mutates an in-memory mock project list —
- * no API calls or persistence per `04-project-dialogs.md`.
+ * Owns dialog state, form state, error state, and pending state for the
+ * create / rename / delete project flows. The project list itself lives on
+ * the server; mutations go through Server Actions, which revalidate
+ * `/editor` so the list refetches.
  */
 export function useProjectDialogs() {
-  const [ownedProjects, setOwnedProjects] = React.useState<MockProject[]>(
-    initialOwnedProjects
-  )
   const [dialog, setDialog] = React.useState<DialogKind>(null)
-  const [activeProject, setActiveProject] = React.useState<MockProject | null>(
-    null
-  )
+  const [activeProject, setActiveProject] =
+    React.useState<ProjectListItem | null>(null)
   const [name, setName] = React.useState("")
-  const [isSubmitting, setIsSubmitting] = React.useState(false)
-
-  const submissionVersionRef = React.useRef(0)
-  const isSubmittingRef = React.useRef(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [isSubmitting, startTransition] = React.useTransition()
+  const dialogSessionId = React.useRef(0)
 
   const closeDialog = React.useCallback(() => {
-    submissionVersionRef.current += 1
-    isSubmittingRef.current = false
+    dialogSessionId.current += 1
     setDialog(null)
     setActiveProject(null)
     setName("")
-    setIsSubmitting(false)
+    setError(null)
   }, [])
 
   const openCreateDialog = React.useCallback(() => {
+    dialogSessionId.current += 1
     setActiveProject(null)
     setName("")
+    setError(null)
     setDialog("create")
   }, [])
 
-  const openRenameDialog = React.useCallback((project: MockProject) => {
+  const openRenameDialog = React.useCallback((project: ProjectListItem) => {
+    dialogSessionId.current += 1
     setActiveProject(project)
     setName(project.name)
+    setError(null)
     setDialog("rename")
   }, [])
 
-  const openDeleteDialog = React.useCallback((project: MockProject) => {
+  const openDeleteDialog = React.useCallback((project: ProjectListItem) => {
+    dialogSessionId.current += 1
     setActiveProject(project)
+    setError(null)
     setDialog("delete")
   }, [])
 
   const slugPreview = React.useMemo(() => slugify(name), [name])
 
-  const submitCreate = React.useCallback(async () => {
+  const submitCreate = React.useCallback(() => {
     const trimmed = name.trim()
-    if (!trimmed || isSubmittingRef.current) return
+    if (!trimmed || isSubmitting) return
 
-    isSubmittingRef.current = true
-    setIsSubmitting(true)
-    submissionVersionRef.current += 1
-    const version = submissionVersionRef.current
+    const submittedSessionId = dialogSessionId.current
+    setError(null)
+    startTransition(async () => {
+      const result = await createProject({ name: trimmed })
+      if (dialogSessionId.current !== submittedSessionId) return
+      if (result.ok) closeDialog()
+      else setError(result.error)
+    })
+  }, [name, isSubmitting, closeDialog])
 
-    await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
-    if (submissionVersionRef.current !== version) return
-
-    const project: MockProject = {
-      id: `proj-${Date.now()}`,
-      name: trimmed,
-      slug: slugify(trimmed),
-      owner: true,
-    }
-    setOwnedProjects((projects) => [...projects, project])
-    closeDialog()
-  }, [name, closeDialog])
-
-  const submitRename = React.useCallback(async () => {
+  const submitRename = React.useCallback(() => {
     const trimmed = name.trim()
-    if (!trimmed || !activeProject || isSubmittingRef.current) return
+    if (!trimmed || !activeProject || isSubmitting) return
 
-    isSubmittingRef.current = true
-    setIsSubmitting(true)
-    submissionVersionRef.current += 1
-    const version = submissionVersionRef.current
+    const submittedSessionId = dialogSessionId.current
+    setError(null)
+    startTransition(async () => {
+      const result = await renameProject({ id: activeProject.id, name: trimmed })
+      if (dialogSessionId.current !== submittedSessionId) return
+      if (result.ok) closeDialog()
+      else setError(result.error)
+    })
+  }, [name, activeProject, isSubmitting, closeDialog])
 
-    await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
-    if (submissionVersionRef.current !== version) return
+  const submitDelete = React.useCallback(() => {
+    if (!activeProject || isSubmitting) return
 
-    setOwnedProjects((projects) =>
-      projects.map((project) =>
-        project.id === activeProject.id
-          ? { ...project, name: trimmed, slug: slugify(trimmed) }
-          : project
-      )
-    )
-    closeDialog()
-  }, [name, activeProject, closeDialog])
-
-  const submitDelete = React.useCallback(async () => {
-    if (!activeProject || isSubmittingRef.current) return
-
-    isSubmittingRef.current = true
-    setIsSubmitting(true)
-    submissionVersionRef.current += 1
-    const version = submissionVersionRef.current
-
-    await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
-    if (submissionVersionRef.current !== version) return
-
-    setOwnedProjects((projects) =>
-      projects.filter((project) => project.id !== activeProject.id)
-    )
-    closeDialog()
-  }, [activeProject, closeDialog])
+    const submittedSessionId = dialogSessionId.current
+    setError(null)
+    startTransition(async () => {
+      const result = await deleteProject({ id: activeProject.id })
+      if (dialogSessionId.current !== submittedSessionId) return
+      if (result.ok) closeDialog()
+      else setError(result.error)
+    })
+  }, [activeProject, isSubmitting, closeDialog])
 
   return {
-    ownedProjects,
     dialog,
     activeProject,
     name,
     setName,
     slugPreview,
+    error,
     isSubmitting,
     openCreateDialog,
     openRenameDialog,
