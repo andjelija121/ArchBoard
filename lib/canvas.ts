@@ -28,14 +28,21 @@ const edgeSchema = z.looseObject({
   target: z.string().min(1),
 })
 
+const MAX_NODES = 2000
+const MAX_EDGES = 5000
+
 export const canvasSnapshotSchema = z.object({
-  nodes: z.array(nodeSchema),
-  edges: z.array(edgeSchema),
+  nodes: z.array(nodeSchema).max(MAX_NODES, "Too many nodes on the board."),
+  edges: z.array(edgeSchema).max(MAX_EDGES, "Too many edges on the board."),
 })
 
 /** Validates untrusted JSON; a null or malformed column is an empty board. */
 export function parseCanvas(value: unknown): CanvasSnapshot {
   if (value === null || value === undefined) return EMPTY_SNAPSHOT
   const result = canvasSnapshotSchema.safeParse(value)
-  return result.success ? (result.data as CanvasSnapshot) : EMPTY_SNAPSHOT
+  if (!result.success) {
+    console.error("parseCanvas: invalid canvas JSON", result.error)
+    return EMPTY_SNAPSHOT
+  }
+  return result.data as CanvasSnapshot
 }

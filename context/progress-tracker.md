@@ -26,6 +26,7 @@ change.
   - `app/globals.css`: added `--color-state-error/success/warning` and `--color-text-subtle` to the `@theme inline` block so the state tokens are usable as Tailwind utilities (they were defined but unmapped).
   - Verified: `npm run lint` and `npm run build` pass with zero errors; `/editor/[projectId]` builds as a dynamic route.
   - **Not verified:** no browser run (needs a live Clerk session). Still to check by hand: sidebar click opens the board, pan/zoom and dark grid render, Save then reload rehydrates, another account's board id gives not-found, the forced-failure error state, z-order under the sidebar/dialogs, mobile layout, and a clean console.
+  - Review pass: an edit-version ref in `board-editor.tsx` keeps the status `dirty` if edits land while a save is in flight (previously overwritten as `saved`); `parseCanvas` logs validation failures; `canvasSnapshotSchema` caps nodes (2000) and edges (5000). Skipped: retaining `setNodes` from `useNodesState` (unused until the Unit 08 toolbar needs it; would only add a lint warning now).
   - Note for Unit 08: the dirty-tracking filter in `board-editor.tsx` only ignores `select`/`dimensions` node changes and `select` edge changes; revisit once real nodes exist.
 
 - **Unit 06: project persistence (`context/feature-specs/06-project-persistence.md`).** The mock in-memory project list is replaced by owner-scoped Postgres persistence.

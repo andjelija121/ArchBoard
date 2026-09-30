@@ -109,28 +109,36 @@ function BoardEditorInner({
   const [status, setStatus] = React.useState<SaveStatusValue>("clean")
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [isPending, startTransition] = React.useTransition()
+  // Bumped on every real edit so a save can tell if edits landed mid-flight.
+  const editVersion = React.useRef(0)
+
+  const markDirty = () => {
+    editVersion.current += 1
+    setStatus("dirty")
+  }
 
   // Selection and measured-size changes aren't edits. Refine further in Unit 08.
   const handleNodesChange: OnNodesChange<BoardNode> = (changes) => {
     onNodesChange(changes)
     if (changes.some((c) => c.type !== "select" && c.type !== "dimensions")) {
-      setStatus("dirty")
+      markDirty()
     }
   }
 
   const handleEdgesChange: OnEdgesChange<BoardEdge> = (changes) => {
     onEdgesChange(changes)
-    if (changes.some((c) => c.type !== "select")) setStatus("dirty")
+    if (changes.some((c) => c.type !== "select")) markDirty()
   }
 
   const onConnect: OnConnect = (connection) => {
     setEdges((current) => addEdge(connection, current))
-    setStatus("dirty")
+    markDirty()
   }
 
   const handleSave = () => {
     if (isPending || status === "saving" || status === "clean") return
     startTransition(async () => {
+      const savedVersion = editVersion.current
       setStatus("saving")
       setSaveError(null)
       const result = await saveCanvas({
@@ -138,7 +146,8 @@ function BoardEditorInner({
         snapshot: { nodes, edges },
       })
       if (result.ok) {
-        setStatus("saved")
+        // Edits made while saving aren't in the saved snapshot; stay dirty.
+        setStatus(editVersion.current === savedVersion ? "saved" : "dirty")
       } else {
         setStatus("error")
         setSaveError(result.error)
