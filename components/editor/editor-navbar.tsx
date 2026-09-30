@@ -11,6 +11,8 @@ interface EditorNavbarProps {
   isSidebarOpen: boolean
   onToggleSidebar: () => void
   sidebarToggleRef?: React.Ref<HTMLButtonElement>
+  centerSlot?: React.ReactNode
+  actionsSlot?: React.ReactNode
   className?: string
 }
 
@@ -18,6 +20,8 @@ export function EditorNavbar({
   isSidebarOpen,
   onToggleSidebar,
   sidebarToggleRef,
+  centerSlot,
+  actionsSlot,
   className,
 }: EditorNavbarProps) {
   return (
@@ -43,9 +47,12 @@ export function EditorNavbar({
         </Button>
       </div>
 
-      <div className="flex flex-1 items-center justify-center" />
+      <div className="flex min-w-0 flex-1 items-center justify-center px-2">
+        {centerSlot}
+      </div>
 
-      <div className="flex flex-1 items-center justify-end">
+      <div className="flex flex-1 items-center justify-end gap-2">
+        {actionsSlot}
         <UserButton />
       </div>
     </nav>

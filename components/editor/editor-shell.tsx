@@ -20,6 +20,8 @@ interface EditorShellRenderProps {
 interface EditorShellProps {
   ownedProjects: ProjectListItem[]
   sharedProjects: ProjectListItem[]
+  navbarCenter?: React.ReactNode
+  navbarActions?: React.ReactNode
   children?: (props: EditorShellRenderProps) => React.ReactNode
 }
 
@@ -32,6 +34,8 @@ interface EditorShellProps {
 export function EditorShell({
   ownedProjects,
   sharedProjects,
+  navbarCenter,
+  navbarActions,
   children,
 }: EditorShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false)
@@ -65,6 +69,8 @@ export function EditorShell({
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
         sidebarToggleRef={sidebarToggleRef}
+        centerSlot={navbarCenter}
+        actionsSlot={navbarActions}
       />
 
       <div className="relative flex-1 overflow-hidden bg-background">

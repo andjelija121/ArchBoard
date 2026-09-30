@@ -5,13 +5,28 @@ change.
 
 ## Current Phase
 
-- Unit 06 (real project persistence) implemented per `context/feature-specs/06-project-persistence.md`. Next is Unit 07: board route + React Flow canvas + snapshot save/load.
+- Unit 07 (board route + React Flow canvas + snapshot save/load) implemented per `context/feature-specs/07-board-canvas.md`. Next is Unit 08: smart nodes + swimlane helper + add-node toolbar.
 
 ## Current Goal
 
-- Unit 07 (`00-build-plan.md`): per-project board route with an empty React Flow canvas, plus save/load of the canvas JSONB snapshot. Spec not written yet.
+- Unit 08 (`00-build-plan.md`): smart nodes, swimlane spawn helper, add-node toolbar. Spec not yet written.
 
 ## Completed
+
+- **Unit 07: board route + React Flow canvas + snapshot save/load (`context/feature-specs/07-board-canvas.md`).**
+  - Installed `@xyflow/react` ^12.12.0 (React 19 / Next 16 compatible).
+  - `lib/canvas.ts` (new): `BoardNode`/`BoardEdge` aliases, `CanvasSnapshot`, `EMPTY_SNAPSHOT`, Zod 4 `canvasSnapshotSchema` (`z.looseObject` so unknown React Flow fields survive round-trips) and `parseCanvas()` (null or malformed JSON becomes an empty board).
+  - `app/editor/_data.ts` (new): `getProjectLists(userId)` holds the owned/shared sidebar queries, now shared by `/editor` and the board route. It lives in `app/editor/` rather than `lib/projects.ts` because `lib/projects.ts` is imported by client components and must not pull Prisma into the client bundle. `app/editor/page.tsx` now calls it.
+  - `app/editor/[projectId]/page.tsx` (new): `auth.protect()`, owner-scoped `findFirst`, `notFound()` when missing or owned by someone else, then renders `BoardEditor` with the parsed snapshot.
+  - `app/editor/[projectId]/actions.ts` (new): `saveCanvas` Server Action. It checks the Clerk user, Zod-validates input, writes through `updateMany` with an `ownerId` guard (another user's id is a "Project not found." no-op), catches and logs errors and returns a generic message. No `revalidatePath`, so unsaved client edits are never clobbered.
+  - `components/canvas/board-canvas.tsx` (new): presentational React Flow viewport with `colorMode="dark"`, dotted `Background` and `Controls`. `react-flow-overrides.css` maps React Flow's `--xy-*` variables onto the app tokens (no hex).
+  - `components/canvas/board-editor.tsx` (new): owns `ReactFlowProvider`, nodes/edges state, the `clean | dirty | saving | saved | error` status machine and the save transition. Selection and dimension-only changes do not mark the board dirty. It renders the title, status indicator and Save button into the navbar slots. The Save button stays enabled after an error so the user can retry.
+  - `editor-navbar.tsx` / `editor-shell.tsx`: optional `centerSlot`/`actionsSlot` (shell: `navbarCenter`/`navbarActions`). With no slots, `/editor` renders as before.
+  - `project-sidebar.tsx`: project names in both My Projects and Shared are now `Link`s to `/editor/[id]` and call `onClose` on click. Rename/Delete buttons stay outside the link.
+  - `app/globals.css`: added `--color-state-error/success/warning` and `--color-text-subtle` to the `@theme inline` block so the state tokens are usable as Tailwind utilities (they were defined but unmapped).
+  - Verified: `npm run lint` and `npm run build` pass with zero errors; `/editor/[projectId]` builds as a dynamic route.
+  - **Not verified:** no browser run (needs a live Clerk session). Still to check by hand: sidebar click opens the board, pan/zoom and dark grid render, Save then reload rehydrates, another account's board id gives not-found, the forced-failure error state, z-order under the sidebar/dialogs, mobile layout, and a clean console.
+  - Note for Unit 08: the dirty-tracking filter in `board-editor.tsx` only ignores `select`/`dimensions` node changes and `select` edge changes; revisit once real nodes exist.
 
 - **Unit 06: project persistence (`context/feature-specs/06-project-persistence.md`).** The mock in-memory project list is replaced by owner-scoped Postgres persistence.
   - `zod` installed (^4.6.5), the first unit needing boundary validation.
@@ -125,7 +140,7 @@ change.
 
 ## Next Up
 
-- Write the Unit 07 spec (board route `/editor/[projectId]`, React Flow canvas, canvas JSONB save/load), then implement it. Project rows in the sidebar are not yet clickable, which is what Unit 07 adds. Install `reactflow` then, not before.
+- Write the Unit 08 spec (smart nodes, swimlane spawn helper, add-node toolbar), then implement it. Also add the `--node-*` palette tokens then (see Open Questions).
 
 ## Open Questions
 
