@@ -6,6 +6,8 @@ import {
   addEdge,
   useEdgesState,
   useNodesState,
+  useReactFlow,
+  useStoreApi,
   type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
@@ -14,10 +16,20 @@ import { AlertCircle, Check, Circle, Loader2, Save } from "lucide-react"
 import { cn } from "cn"
 
 import { saveCanvas } from "@/app/editor/[projectId]/actions"
+import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
 import { BoardCanvas } from "@/components/canvas/board-canvas"
 import { EditorShell } from "@/components/editor/editor-shell"
 import { Button } from "@/components/ui/button"
-import type { BoardEdge, BoardNode, CanvasSnapshot } from "@/lib/canvas"
+import {
+  CATEGORY_LABEL,
+  createNodeId,
+  nextLanePosition,
+  type BoardEdge,
+  type BoardNode,
+  type CanvasSnapshot,
+  type NodeCategory,
+  type SmartNodeData,
+} from "@/lib/canvas"
 import type { ProjectListItem } from "@/lib/projects"
 
 type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
@@ -48,6 +60,18 @@ const STATUS_DISPLAY: Record<
     label: "Save failed",
     className: "text-state-error",
   },
+}
+
+// Screen-space margin (px) kept around a revealed node. The bottom is larger
+// so the node clears the floating add-node toolbar.
+const REVEAL_PADDING = { left: 48, right: 48, top: 48, bottom: 96 }
+const REVEAL_DURATION_MS = 200
+
+/** Shift needed to pull [start, end] inside [min, max]; 0 when already inside. */
+function shiftIntoRange(start: number, end: number, min: number, max: number) {
+  if (start < min) return min - start
+  if (end > max) return max - end
+  return 0
 }
 
 function BoardTitle({ name }: { name: string }) {
@@ -100,7 +124,7 @@ function BoardEditorInner({
   ownedProjects,
   sharedProjects,
 }: BoardEditorProps) {
-  const [nodes, , onNodesChange] = useNodesState<BoardNode>(
+  const [nodes, setNodes, onNodesChange] = useNodesState<BoardNode>(
     initialSnapshot.nodes
   )
   const [edges, setEdges, onEdgesChange] = useEdgesState<BoardEdge>(
@@ -111,17 +135,67 @@ function BoardEditorInner({
   const [isPending, startTransition] = React.useTransition()
   // Bumped on every real edit so a save can tell if edits landed mid-flight.
   const editVersion = React.useRef(0)
+  const { getViewport, setViewport } = useReactFlow()
+  const store = useStoreApi()
+  // A node just added from the toolbar, waiting for its first measurement.
+  const pendingReveal = React.useRef<{
+    id: string
+    x: number
+    y: number
+  } | null>(null)
 
   const markDirty = () => {
     editVersion.current += 1
     setStatus("dirty")
   }
 
-  // Selection and measured-size changes aren't edits. Refine further in Unit 08.
+  // Pans the minimum distance needed to bring a measured node fully on screen.
+  const revealNode = (
+    node: { x: number; y: number },
+    size: { width: number; height: number }
+  ) => {
+    const { width: viewWidth, height: viewHeight } = store.getState()
+    const { x: vx, y: vy, zoom } = getViewport()
+    const left = node.x * zoom + vx
+    const top = node.y * zoom + vy
+    const dx = shiftIntoRange(
+      left,
+      left + size.width * zoom,
+      REVEAL_PADDING.left,
+      viewWidth - REVEAL_PADDING.right
+    )
+    const dy = shiftIntoRange(
+      top,
+      top + size.height * zoom,
+      REVEAL_PADDING.top,
+      viewHeight - REVEAL_PADDING.bottom
+    )
+    if (dx === 0 && dy === 0) return
+    void setViewport(
+      { x: vx + dx, y: vy + dy, zoom },
+      { duration: REVEAL_DURATION_MS }
+    )
+  }
+
+  // Selection and measured-size changes aren't edits.
   const handleNodesChange: OnNodesChange<BoardNode> = (changes) => {
     onNodesChange(changes)
     if (changes.some((c) => c.type !== "select" && c.type !== "dimensions")) {
       markDirty()
+    }
+
+    const pending = pendingReveal.current
+    if (!pending) return
+    for (const change of changes) {
+      if (
+        change.type === "dimensions" &&
+        change.id === pending.id &&
+        change.dimensions
+      ) {
+        pendingReveal.current = null
+        revealNode(pending, change.dimensions)
+        break
+      }
     }
   }
 
@@ -132,6 +206,18 @@ function BoardEditorInner({
 
   const onConnect: OnConnect = (connection) => {
     setEdges((current) => addEdge(connection, current))
+    markDirty()
+  }
+
+  const handleAddNode = (category: NodeCategory) => {
+    const data: SmartNodeData = { category, label: CATEGORY_LABEL[category] }
+    const id = createNodeId()
+    const position = nextLanePosition(category, nodes)
+    pendingReveal.current = { id, ...position }
+    setNodes((current) => [
+      ...current,
+      { id, type: category, position, data },
+    ])
     markDirty()
   }
 
@@ -175,13 +261,16 @@ function BoardEditorInner({
       }
     >
       {() => (
-        <BoardCanvas
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-        />
+        <div className="relative h-full w-full">
+          <BoardCanvas
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+          />
+          <AddNodeToolbar onAdd={handleAddNode} />
+        </div>
       )}
     </EditorShell>
   )

@@ -5,13 +5,27 @@ change.
 
 ## Current Phase
 
-- Unit 07 (board route + React Flow canvas + snapshot save/load) implemented per `context/feature-specs/07-board-canvas.md`. Next is Unit 08: smart nodes + swimlane helper + add-node toolbar.
+- Unit 08 (smart nodes + swimlane helper + add-node toolbar) implemented per `context/feature-specs/08-smart-nodes.md`. Next is Unit 09: annotated edges + edge property panel.
 
 ## Current Goal
 
-- Unit 08 (`00-build-plan.md`): smart nodes, swimlane spawn helper, add-node toolbar. Spec not yet written.
+- Unit 09 (`00-build-plan.md`): custom annotated edge type and right-anchored edge property panel. Spec not yet written.
 
 ## Completed
+
+- **Unit 08: smart nodes + swimlane layout + add-node toolbar (`context/feature-specs/08-smart-nodes.md`).**
+  - `app/globals.css`: added the six `--node-*` colors and their 15%-alpha `--node-*-bg` variants under both `:root` and `.dark`, and mapped all twelve into `@theme inline` as `--color-node-*` so `bg-node-database-bg`, `text-node-lb`, `border-node-cache` etc. work as utilities. This closes the open `--node-*` question (`--radius` already existed).
+  - `lib/canvas.ts`: added `NODE_CATEGORIES`/`NodeCategory`, `SWIMLANE_ORDER` (client, lb, compute, cache, queue, database), `CATEGORY_LABEL`, the layout constants (`NODE_WIDTH` 176, `NODE_HEIGHT` 56, `COLUMN_STEP` 256, `ROW_HEIGHT` 80, `LANE_TOP` 40), `smartNodeDataSchema`/`SmartNodeData` (`{ category, label, subLabel? }`, the contract Unit 12's AI output must match), the pure `nextLanePosition(category, nodes)` and `createNodeId()`. `canvasSnapshotSchema` is deliberately unchanged and still permissive.
+  - `components/canvas/nodes/node-style.ts` (new): the single category-to-icon (`Monitor`, `Split`, `Server`, `Zap`, `ListOrdered`, `Database`) and category-to-Tailwind-class maps, shared by the node and the toolbar. Classes are spelled out per category so Tailwind emits them.
+  - `components/canvas/nodes/smart-node.tsx` (new): one memoized `SmartNode` for all six types. It validates `data` with `smartNodeDataSchema.safeParse` and renders nothing for a malformed node, so one bad node can't crash the board. Selected nodes get `border-2 border-primary`. Left target and right source handles.
+  - `components/canvas/nodes/node-types.ts` (new): module-level `nodeTypes` map (all six keys point at `SmartNode`), passed to `<ReactFlow nodeTypes>` in `board-canvas.tsx`.
+  - `components/canvas/add-node-toolbar.tsx` (new): floating bottom-center palette (`z-30`), one ghost button per category in swimlane order showing a colored icon plus a visible label. It wraps onto a second row on narrow viewports (`flex-wrap`, `max-w-[calc(100%-2rem)]`).
+  - `components/canvas/board-editor.tsx`: keeps `setNodes` from `useNodesState`, adds `handleAddNode` (default label is the category name, position from `nextLanePosition`, then `markDirty()`), and renders the toolbar next to the canvas in a `relative` wrapper. The Unit 07 dirty filter was reviewed and left as is: with real nodes, position/remove/add changes flip to dirty while select and dimension changes don't.
+  - Review fix (reveal new node): `handleAddNode` records the new node in a `pendingReveal` ref. When React Flow emits that node's first `dimensions` change (i.e. after it is measured), `revealNode` computes its screen rect from the current viewport and pans by the minimum shift needed to bring it inside the canvas (padding 48px, 96px at the bottom to clear the toolbar). If the node is already fully visible the viewport is left alone. Zoom never changes. Uses `useReactFlow().getViewport/setViewport` and `useStoreApi()` for the canvas size.
+  - Fix: `app/layout.tsx` `<body>` now has `suppressHydrationWarning`; a Grammarly extension injects attributes on `<body>` and triggered a hydration-mismatch console error.
+  - No Save action or schema change was needed; new nodes pass through the loose `canvasSnapshotSchema`.
+  - Verified: `tsc --noEmit`, `npm run lint` and `npm run build` pass with zero errors. A `tsx` script confirmed `nextLanePosition` stacks database nodes at y = 40/120/200/280 in x = 1280 and puts client at x = 0, compute at x = 512, each starting at y = 40.
+  - **Not verified:** no browser run (needs a live Clerk session). Still to check by hand: toolbar renders bottom-center and wraps on mobile, each button spawns a correctly styled node in its lane, nodes drag and show the selection border, Save then reload rehydrates nodes with their colors and icons, a hand-corrupted node renders as nothing without crashing the board, toolbar sits under the project sidebar and dialogs, and a clean console.
 
 - **Unit 07: board route + React Flow canvas + snapshot save/load (`context/feature-specs/07-board-canvas.md`).**
   - Installed `@xyflow/react` ^12.12.0 (React 19 / Next 16 compatible).
@@ -141,11 +155,11 @@ change.
 
 ## Next Up
 
-- Write the Unit 08 spec (smart nodes, swimlane spawn helper, add-node toolbar), then implement it. Also add the `--node-*` palette tokens then (see Open Questions).
+- Write the Unit 09 spec (annotated edges + edge property panel), then implement it.
 
 ## Open Questions
 
-- `--radius` and the node-category canvas palette (`--node-*`) from `ui-context.md` were not added — no canvas components exist yet to consume them; add when `components/canvas/` is scaffolded.
+- Default node label is the category name and there is no way to rename a node yet. Unit 09's property panel scope (or a later unit) needs to decide where node renaming lives.
 - `02-editor.md` didn't specify who owns the open/closed state shared by `editor-navbar.tsx` and `project-sidebar.tsx`, or a fixed width for the project sidebar. Made both components controlled (parent passes `isSidebarOpen`/`isOpen` + toggle callbacks) and picked `w-80` (320px, standard Tailwind scale) for the sidebar width, distinct from the 360px AI chat sidebar `ui-context.md` defines elsewhere. Neither is wired into a page yet — no editor page/layout exists to mount them.
 - `02-editor.md` didn't assign a z-index layer to the project sidebar specifically; reused `z-40` (the "AI chat sidebar / property panel" layer from `ui-context.md`'s hierarchy) since it's the closest matching floating-panel-over-canvas layer.
 
