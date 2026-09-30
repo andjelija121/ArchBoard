@@ -140,13 +140,9 @@ export function ProjectSidebar({
                     key={project.id}
                     className="flex items-center rounded-lg px-2 py-1.5 hover:bg-muted"
                   >
-                    <Link
-                      href={`/editor/${project.id}`}
-                      onClick={onClose}
-                      className="flex-1 truncate rounded-sm text-sm text-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-                    >
+                    <span className="flex-1 truncate text-sm text-foreground">
                       {project.name}
-                    </Link>
+                    </span>
                   </li>
                 ))}
               </ul>
