@@ -14,10 +14,20 @@ import { AlertCircle, Check, Circle, Loader2, Save } from "lucide-react"
 import { cn } from "cn"
 
 import { saveCanvas } from "@/app/editor/[projectId]/actions"
+import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
 import { BoardCanvas } from "@/components/canvas/board-canvas"
 import { EditorShell } from "@/components/editor/editor-shell"
 import { Button } from "@/components/ui/button"
-import type { BoardEdge, BoardNode, CanvasSnapshot } from "@/lib/canvas"
+import {
+  CATEGORY_LABEL,
+  createNodeId,
+  nextLanePosition,
+  type BoardEdge,
+  type BoardNode,
+  type CanvasSnapshot,
+  type NodeCategory,
+  type SmartNodeData,
+} from "@/lib/canvas"
 import type { ProjectListItem } from "@/lib/projects"
 
 type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
@@ -100,7 +110,7 @@ function BoardEditorInner({
   ownedProjects,
   sharedProjects,
 }: BoardEditorProps) {
-  const [nodes, , onNodesChange] = useNodesState<BoardNode>(
+  const [nodes, setNodes, onNodesChange] = useNodesState<BoardNode>(
     initialSnapshot.nodes
   )
   const [edges, setEdges, onEdgesChange] = useEdgesState<BoardEdge>(
@@ -117,7 +127,7 @@ function BoardEditorInner({
     setStatus("dirty")
   }
 
-  // Selection and measured-size changes aren't edits. Refine further in Unit 08.
+  // Selection and measured-size changes aren't edits.
   const handleNodesChange: OnNodesChange<BoardNode> = (changes) => {
     onNodesChange(changes)
     if (changes.some((c) => c.type !== "select" && c.type !== "dimensions")) {
@@ -132,6 +142,20 @@ function BoardEditorInner({
 
   const onConnect: OnConnect = (connection) => {
     setEdges((current) => addEdge(connection, current))
+    markDirty()
+  }
+
+  const handleAddNode = (category: NodeCategory) => {
+    const data: SmartNodeData = { category, label: CATEGORY_LABEL[category] }
+    setNodes((current) => [
+      ...current,
+      {
+        id: createNodeId(),
+        type: category,
+        position: nextLanePosition(category, current),
+        data,
+      },
+    ])
     markDirty()
   }
 
@@ -175,13 +199,16 @@ function BoardEditorInner({
       }
     >
       {() => (
-        <BoardCanvas
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-        />
+        <div className="relative h-full w-full">
+          <BoardCanvas
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+          />
+          <AddNodeToolbar onAdd={handleAddNode} />
+        </div>
       )}
     </EditorShell>
   )

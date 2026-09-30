@@ -46,7 +46,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         className={`${ibmPlexSans.variable} ${jetBrainsMono.variable} dark h-full antialiased`}
         suppressHydrationWarning
       >
-        <body className="flex h-dvh flex-col overflow-hidden">{children}</body>
+        <body
+          className="flex h-dvh flex-col overflow-hidden"
+          suppressHydrationWarning
+        >
+          {children}
+        </body>
       </html>
     </ClerkProvider>
   );

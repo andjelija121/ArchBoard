@@ -12,6 +12,7 @@ import {
 import "@xyflow/react/dist/style.css"
 import "./react-flow-overrides.css"
 
+import { nodeTypes } from "@/components/canvas/nodes/node-types"
 import type { BoardEdge, BoardNode } from "@/lib/canvas"
 
 interface BoardCanvasProps {
@@ -35,6 +36,7 @@ export function BoardCanvas({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
