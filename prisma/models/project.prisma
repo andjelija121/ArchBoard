@@ -15,6 +15,7 @@ model Project {
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
   collaborators ProjectCollaborator[]
+  shareLinks    ShareLink[]
 
   @@unique([ownerId, slug])
   @@index([ownerId])
@@ -34,4 +35,23 @@ model ProjectCollaborator {
   @@index([collaboratorEmail])
   @@index([projectId, createdAt])
   @@map("project_collaborators")
+}
+
+enum ShareRole {
+  VIEW
+  EDIT
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  projectId String    @map("project_id")
+  role      ShareRole @default(EDIT)
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("share_links")
 }

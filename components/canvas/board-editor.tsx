@@ -10,7 +10,15 @@ import {
   type OnNodesChange,
   type OnSelectionChangeFunc,
 } from "@xyflow/react"
-import { AlertCircle, Check, Circle, Loader2, Save, Sparkles } from "lucide-react"
+import {
+  AlertCircle,
+  Check,
+  Circle,
+  Loader2,
+  Save,
+  Share2,
+  Sparkles,
+} from "lucide-react"
 import { cn } from "cn"
 
 import { saveCanvas } from "@/app/editor/[projectId]/actions"
@@ -19,12 +27,14 @@ import { useAiSidebar } from "@/components/ai/use-ai-sidebar"
 import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
 import { BoardCanvas } from "@/components/canvas/board-canvas"
 import { Cursors } from "@/components/canvas/cursors"
+import { GuestNavbar } from "@/components/canvas/guest-navbar"
 import { HelpButton } from "@/components/canvas/help-dialog"
 import {
   PropertyPanel,
   type PropertyPanelSelection,
 } from "@/components/canvas/property-panel"
 import { EditorShell } from "@/components/editor/editor-shell"
+import { ShareDialog } from "@/components/editor/share-dialog"
 import { Button } from "@/components/ui/button"
 import {
   ANNOTATED_EDGE_TYPE,
@@ -53,6 +63,7 @@ import { useLiveCanvas } from "@/lib/liveblocks/use-live-canvas"
 import { useLiveCursors } from "@/lib/liveblocks/use-live-cursors"
 import { LiveRoom } from "@/lib/liveblocks/room-provider"
 import type { ProjectListItem } from "@/lib/projects"
+import type { ShareLinkItem } from "@/lib/share"
 
 type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
 
@@ -69,13 +80,27 @@ const selectedNodeElement = (node: BoardNode): SelectedElement => ({
 const sameIds = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((id, i) => id === b[i])
 
+/**
+ * `owner` is the signed-in board owner (everything). `edit` / `view` are
+ * anonymous share-link guests: no Save, Share, AI or project sidebar, and
+ * `view` is a read-only canvas.
+ */
+export type BoardAccess = "owner" | "edit" | "view"
+
 interface BoardEditorProps {
   projectId: string
   projectName: string
   initialSnapshot: CanvasSnapshot
-  ownedProjects: ProjectListItem[]
-  sharedProjects: ProjectListItem[]
+  /** Defaults to `owner`. */
+  access?: BoardAccess
+  /** Owner only. */
+  ownedProjects?: ProjectListItem[]
+  sharedProjects?: ProjectListItem[]
+  initialShareLinks?: ShareLinkItem[]
 }
+
+const NO_PROJECTS: ProjectListItem[] = []
+const NO_LINKS: ShareLinkItem[] = []
 
 const STATUS_DISPLAY: Record<
   SaveStatusValue,
@@ -158,9 +183,14 @@ export function BoardEditor(props: BoardEditorProps) {
 function BoardEditorInner({
   projectId,
   projectName,
-  ownedProjects,
-  sharedProjects,
+  access = "owner",
+  ownedProjects = NO_PROJECTS,
+  sharedProjects = NO_PROJECTS,
+  initialShareLinks = NO_LINKS,
 }: BoardEditorProps) {
+  const isOwner = access === "owner"
+  const canEdit = access !== "view"
+  const [shareOpen, setShareOpen] = React.useState(false)
   const [selection, setSelection] = React.useState<SelectedElement | null>(
     null
   )
@@ -195,7 +225,7 @@ function BoardEditorInner({
     setNodes,
     setEdges,
     addEdge,
-  } = useLiveCanvas({ onMutate: markDirty })
+  } = useLiveCanvas({ onMutate: isOwner ? markDirty : undefined })
   const { onPointerMove, onPointerLeave } = useLiveCursors()
 
   const handleSpawnResult = React.useCallback(
@@ -528,6 +558,81 @@ function BoardEditorInner({
     })
   }
 
+  // Guests get a read-only canvas, no add-node toolbar and no property panel
+  // when viewing; editing guests get the same canvas tools as the owner.
+  const board = (
+    <div className="flex h-full w-full">
+      <div className="relative flex-1 overflow-hidden">
+        <BoardCanvas
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onEdgeClick={handleEdgeClick}
+          onNodeClick={handleNodeClick}
+          onPaneClick={handlePaneClick}
+          onSelectionChange={handleSelectionChange}
+          onNodeDragStart={handleNodeDragStart}
+          onNodeDrag={handleNodeDrag}
+          onNodeDragStop={handleNodeDragStop}
+          onPointerMove={onPointerMove}
+          onPointerLeave={onPointerLeave}
+          readOnly={!canEdit}
+        >
+          <Cursors />
+        </BoardCanvas>
+        {canEdit && (
+          <AddNodeToolbar
+            onAdd={handleAddNode}
+            onGroup={handleGroup}
+            canGroup={canGroup}
+          />
+        )}
+        {canEdit && panelSelection && (
+          <PropertyPanel
+            selection={panelSelection}
+            onEdgeDataChange={updateEdgeData}
+            onNodeDataChange={updateNodeData}
+            onGroupDataChange={updateGroupData}
+            onUngroup={ungroup}
+            onClose={clearSelection}
+          />
+        )}
+      </div>
+      {isOwner && (
+        <div
+          className={cn(
+            "h-full shrink-0 transition-[width] duration-200 ease-in-out",
+            ai.isOpen ? "lg:w-90" : "lg:w-0 lg:overflow-hidden"
+          )}
+        >
+          <AiSidebar
+            isOpen={ai.isOpen}
+            onClose={ai.close}
+            input={ai.input}
+            onInputChange={ai.setInput}
+            messages={ai.messages}
+            isSending={ai.isSending}
+            onSubmit={ai.submit}
+            onRetry={ai.retry}
+          />
+        </div>
+      )}
+    </div>
+  )
+
+  if (!isOwner) {
+    return (
+      <div className="flex h-full flex-1 flex-col">
+        <GuestNavbar title={projectName} canEdit={canEdit} />
+        <div className="relative flex-1 overflow-hidden bg-background">
+          {board}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <EditorShell
       ownedProjects={ownedProjects}
@@ -535,6 +640,20 @@ function BoardEditorInner({
       navbarCenter={<BoardTitle name={projectName} />}
       navbarActions={
         <>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setShareOpen(true)}
+            aria-label="Share board"
+          >
+            <Share2 className="h-4 w-4" strokeWidth={1.5} />
+          </Button>
+          <ShareDialog
+            open={shareOpen}
+            onOpenChange={setShareOpen}
+            projectId={projectId}
+            initialLinks={initialShareLinks}
+          />
           <Button
             variant="ghost"
             size="icon-sm"
@@ -557,62 +676,7 @@ function BoardEditorInner({
         </>
       }
     >
-      {() => (
-        <div className="flex h-full w-full">
-          <div className="relative flex-1 overflow-hidden">
-            <BoardCanvas
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onEdgeClick={handleEdgeClick}
-              onNodeClick={handleNodeClick}
-              onPaneClick={handlePaneClick}
-              onSelectionChange={handleSelectionChange}
-              onNodeDragStart={handleNodeDragStart}
-              onNodeDrag={handleNodeDrag}
-              onNodeDragStop={handleNodeDragStop}
-              onPointerMove={onPointerMove}
-              onPointerLeave={onPointerLeave}
-            >
-              <Cursors />
-            </BoardCanvas>
-            <AddNodeToolbar
-              onAdd={handleAddNode}
-              onGroup={handleGroup}
-              canGroup={canGroup}
-            />
-            {panelSelection && (
-              <PropertyPanel
-                selection={panelSelection}
-                onEdgeDataChange={updateEdgeData}
-                onNodeDataChange={updateNodeData}
-                onGroupDataChange={updateGroupData}
-                onUngroup={ungroup}
-                onClose={clearSelection}
-              />
-            )}
-          </div>
-          <div
-            className={cn(
-              "h-full shrink-0 transition-[width] duration-200 ease-in-out",
-              ai.isOpen ? "lg:w-90" : "lg:w-0 lg:overflow-hidden"
-            )}
-          >
-            <AiSidebar
-              isOpen={ai.isOpen}
-              onClose={ai.close}
-              input={ai.input}
-              onInputChange={ai.setInput}
-              messages={ai.messages}
-              isSending={ai.isSending}
-              onSubmit={ai.submit}
-              onRetry={ai.retry}
-            />
-          </div>
-        </div>
-      )}
+      {() => board}
     </EditorShell>
   )
 }
