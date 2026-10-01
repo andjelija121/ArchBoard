@@ -5,13 +5,24 @@ change.
 
 ## Current Phase
 
-- Unit 10 (bounding boxes) implemented per `context/feature-specs/10-bounding-boxes.md`; code complete, `tsc`/`lint`/`build` pass, browser verification pending. Unit 09 (annotated edges + shared property panel) is likewise code complete and awaiting browser verification.
+- Unit 11 (AI chat sidebar UI) implemented per `context/feature-specs/11-ai-sidebar.md`; code complete, `tsc`/`lint`/`build` pass, browser verification pending. Units 09 and 10 also awaiting browser verification.
 
 ## Current Goal
 
-- Hand-verify Units 09 and 10 in a browser (needs a live Clerk session), then start Unit 11 (AI chat sidebar UI).
+- Browser-verify Units 09–11 (needs a live Clerk session), then start Unit 12 (Trigger.dev + Gemini backend + node spawning).
 
 ## Completed
+
+- **Unit 11: AI chat sidebar UI (`context/feature-specs/11-ai-sidebar.md`).**
+  - `components/ai/ai-types.ts` (new): `ChatRole`, `GenerationStatus`, `ChatMessage` interface, `createMessageId()` (`m_` prefix).
+  - `components/ai/use-ai-sidebar.ts` (new): dedicated hook owning open state, input draft, message list, `isSending`, and the stub submit. `isOpen` defaults `false` (SSR-safe), set `true` on mount if `lg` media query matches. Stub `submit` appends a user message and a pending assistant message, resolves to a fixed placeholder after 1200ms. Timer ref cleared on unmount. `retry(prompt)` re-calls `submit(prompt)`. Public shape is the seam Unit 12 replaces.
+  - `components/ai/chat-message.tsx` (new): `React.memo` presentational component. User messages: right-aligned bubble (`ml-auto max-w-[85%] bg-muted rounded-md`), timestamp below. Assistant messages: left-aligned with leading `Sparkles` icon, branching on `status`: `pending` shows `Loader2 animate-spin` + "Generating…"; `success` shows reply text; `error` shows `AlertCircle` + error text in `--state-error` + Retry button.
+  - `components/ai/ai-empty-state.tsx` (new): centered hero with `Sparkles h-8 w-8`, description line, and 3 example prompt chips. Clicking a chip fills the composer (does not auto-send).
+  - `components/ai/ai-sidebar.tsx` (new): the panel shell. Mobile: right overlay (`absolute inset-y-0 right-0 z-40 w-full max-w-90`, `translate-x-full` ↔ `translate-x-0`) with backdrop scrim (`fixed inset-0 z-30 bg-black/50 lg:hidden`). Desktop: docked flex sibling (`lg:static lg:z-auto lg:w-full lg:max-w-none lg:translate-x-0`). Header: 48px, `Sparkles` icon + "AI Assistant" title + `PanelRightClose` close button. Body: `ScrollArea` with empty state or mapped `ChatMessageRow` list; auto-scrolls to bottom on new messages. Composer: `Textarea` with auto-grow (capped at `max-h-40`), Enter submits / Shift+Enter newlines, `ArrowUp` send button disabled when empty or sending, hint text below. `inert={!isOpen}` when collapsed.
+  - `components/canvas/board-editor.tsx`: calls `useAiSidebar()`. Navbar actions: added `Sparkles` toggle button (`aria-pressed`, `aria-label="Toggle AI assistant"`) before `HelpButton`. Children layout: wrapped canvas area and sidebar in a flex row — canvas in `relative flex-1 overflow-hidden`, sidebar wrapper is `shrink-0` with `lg:w-90` ↔ `lg:w-0 lg:overflow-hidden` animated via `transition-[width]`. The `PropertyPanel` stays inside the canvas `flex-1` child, anchoring to the right edge of the canvas (immediately left of the docked sidebar) — no Unit 09 behavior change.
+  - No server/schema/Prisma/dependency changes. Chat is local component state, not persisted.
+  - Verified: `tsc --noEmit`, `npm run lint` and `npm run build` pass with zero errors.
+  - **Not verified:** no browser run (needs a live Clerk session). Still to check by hand: docked 360px on desktop / overlay on mobile, toggle collapses/reopens, empty state chips fill composer, Enter sends / Shift+Enter newlines, pending → success transition, error state + Retry, auto-scroll, `inert` on collapse, property panel coexistence, no console errors, responsive at mobile/desktop.
 
 - **Unit 10: bounding boxes (`context/feature-specs/10-bounding-boxes.md`).**
   - `lib/canvas.ts`: added `GROUP_NODE_TYPE`, `createGroupId()` (`g_` prefix), `GROUP_COLORS`/`GroupColor`/`DEFAULT_GROUP_COLOR` (slate default), layout constants (`GROUP_PADDING` 24, `GROUP_HEADER` 28, `GROUP_MIN_WIDTH` 160, `GROUP_MIN_HEIGHT` 120), `groupNodeDataSchema`/`GroupNodeData` (`{ label, color, childIds }`), `DEFAULT_GROUP_LABEL` and the pure `computeGroupBounds()`. `canvasSnapshotSchema` is unchanged and still loose, so a box round-trips as an ordinary node: no server, Prisma or migration change.
@@ -195,12 +206,12 @@ change.
 
 ## In Progress
 
-- None yet.
+- Nothing actively in progress.
 
 ## Next Up
 
-- Browser-verify Unit 09 and Unit 10 (checklists in their entries above and in `09-annotated-edges.md` / `10-bounding-boxes.md`).
-- Unit 11: AI chat sidebar UI (see `00-build-plan.md`).
+- Browser-verify Units 09, 10 and 11 (checklists in their entries above and in `09-annotated-edges.md` / `10-bounding-boxes.md` / `11-ai-sidebar.md`).
+- Write Unit 12 spec and implement (Trigger.dev + Gemini backend + node spawning).
 
 ## Open Questions
 
