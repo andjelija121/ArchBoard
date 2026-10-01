@@ -14,10 +14,12 @@ import {
   type OnNodesChange,
   type OnSelectionChangeFunc,
 } from "@xyflow/react"
-import { AlertCircle, Check, Circle, Loader2, Save } from "lucide-react"
+import { AlertCircle, Check, Circle, Loader2, Save, Sparkles } from "lucide-react"
 import { cn } from "cn"
 
 import { saveCanvas } from "@/app/editor/[projectId]/actions"
+import { AiSidebar } from "@/components/ai/ai-sidebar"
+import { useAiSidebar } from "@/components/ai/use-ai-sidebar"
 import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
 import { BoardCanvas } from "@/components/canvas/board-canvas"
 import { HelpButton } from "@/components/canvas/help-dialog"
@@ -169,6 +171,7 @@ function BoardEditorInner({
   const [groupableIds, setGroupableIds] = React.useState<string[]>([])
   const [status, setStatus] = React.useState<SaveStatusValue>("clean")
   const [saveError, setSaveError] = React.useState<string | null>(null)
+  const ai = useAiSidebar()
   const [isPending, startTransition] = React.useTransition()
   // Bumped on every real edit so a save can tell if edits landed mid-flight.
   const editVersion = React.useRef(0)
@@ -496,6 +499,15 @@ function BoardEditorInner({
       navbarCenter={<BoardTitle name={projectName} />}
       navbarActions={
         <>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={ai.toggle}
+            aria-label="Toggle AI assistant"
+            aria-pressed={ai.isOpen}
+          >
+            <Sparkles className="h-4 w-4" strokeWidth={1.5} />
+          </Button>
           <HelpButton />
           <SaveStatus status={status} error={saveError} />
           <Button
@@ -510,36 +522,55 @@ function BoardEditorInner({
       }
     >
       {() => (
-        <div className="relative h-full w-full">
-          <BoardCanvas
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={handleEdgesChange}
-            onConnect={onConnect}
-            onEdgeClick={handleEdgeClick}
-            onNodeClick={handleNodeClick}
-            onPaneClick={handlePaneClick}
-            onSelectionChange={handleSelectionChange}
-            onNodeDragStart={handleNodeDragStart}
-            onNodeDrag={handleNodeDrag}
-            onNodeDragStop={handleNodeDragStop}
-          />
-          <AddNodeToolbar
-            onAdd={handleAddNode}
-            onGroup={handleGroup}
-            canGroup={canGroup}
-          />
-          {panelSelection && (
-            <PropertyPanel
-              selection={panelSelection}
-              onEdgeDataChange={updateEdgeData}
-              onNodeDataChange={updateNodeData}
-              onGroupDataChange={updateGroupData}
-              onUngroup={ungroup}
-              onClose={clearSelection}
+        <div className="flex h-full w-full">
+          <div className="relative flex-1 overflow-hidden">
+            <BoardCanvas
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={handleNodesChange}
+              onEdgesChange={handleEdgesChange}
+              onConnect={onConnect}
+              onEdgeClick={handleEdgeClick}
+              onNodeClick={handleNodeClick}
+              onPaneClick={handlePaneClick}
+              onSelectionChange={handleSelectionChange}
+              onNodeDragStart={handleNodeDragStart}
+              onNodeDrag={handleNodeDrag}
+              onNodeDragStop={handleNodeDragStop}
             />
-          )}
+            <AddNodeToolbar
+              onAdd={handleAddNode}
+              onGroup={handleGroup}
+              canGroup={canGroup}
+            />
+            {panelSelection && (
+              <PropertyPanel
+                selection={panelSelection}
+                onEdgeDataChange={updateEdgeData}
+                onNodeDataChange={updateNodeData}
+                onGroupDataChange={updateGroupData}
+                onUngroup={ungroup}
+                onClose={clearSelection}
+              />
+            )}
+          </div>
+          <div
+            className={cn(
+              "h-full shrink-0 transition-[width] duration-200 ease-in-out",
+              ai.isOpen ? "lg:w-90" : "lg:w-0 lg:overflow-hidden"
+            )}
+          >
+            <AiSidebar
+              isOpen={ai.isOpen}
+              onClose={ai.close}
+              input={ai.input}
+              onInputChange={ai.setInput}
+              messages={ai.messages}
+              isSending={ai.isSending}
+              onSubmit={ai.submit}
+              onRetry={ai.retry}
+            />
+          </div>
         </div>
       )}
     </EditorShell>
