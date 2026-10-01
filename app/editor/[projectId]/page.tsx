@@ -25,7 +25,14 @@ export default async function BoardPage({ params }: BoardPageProps) {
   })
   if (!project) notFound()
 
-  const { ownedProjects, sharedProjects } = await getProjectLists(userId)
+  const [{ ownedProjects, sharedProjects }, shareLinks] = await Promise.all([
+    getProjectLists(userId),
+    prisma.shareLink.findMany({
+      where: { projectId: project.id, revokedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, token: true, role: true, createdAt: true },
+    }),
+  ])
 
   return (
     <BoardEditor
@@ -34,6 +41,10 @@ export default async function BoardPage({ params }: BoardPageProps) {
       initialSnapshot={parseCanvas(project.canvas)}
       ownedProjects={ownedProjects}
       sharedProjects={sharedProjects}
+      initialShareLinks={shareLinks.map((link) => ({
+        ...link,
+        createdAt: link.createdAt.toISOString(),
+      }))}
     />
   )
 }

@@ -39,6 +39,8 @@ interface BoardCanvasProps {
   onNodeDragStop: OnNodeDrag<BoardNode>
   onPointerMove: React.PointerEventHandler<HTMLDivElement>
   onPointerLeave: React.PointerEventHandler<HTMLDivElement>
+  /** View-only guests: no dragging, connecting, selecting or focusing. */
+  readOnly?: boolean
   /** Rendered inside the viewport, e.g. the live cursor overlay. */
   children?: React.ReactNode
 }
@@ -65,6 +67,7 @@ export function BoardCanvas({
   onNodeDragStop,
   onPointerMove,
   onPointerLeave,
+  readOnly = false,
   children,
 }: BoardCanvasProps) {
   return (
@@ -93,6 +96,12 @@ export function BoardCanvas({
           // Selecting a node would otherwise lift it 1000 z-levels, so a
           // selected bounding box would cover (and swallow clicks for) its members.
           elevateNodesOnSelect={false}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          elementsSelectable={!readOnly}
+          edgesFocusable={!readOnly}
+          nodesFocusable={!readOnly}
+          deleteKeyCode={readOnly ? null : undefined}
           colorMode="dark"
           fitView
           proOptions={{ hideAttribution: false }}
