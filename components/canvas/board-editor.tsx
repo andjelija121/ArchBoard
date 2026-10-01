@@ -21,7 +21,6 @@ import {
 } from "lucide-react"
 import { cn } from "cn"
 
-import { saveCanvas } from "@/app/editor/[projectId]/actions"
 import { AiSidebar } from "@/components/ai/ai-sidebar"
 import { useAiSidebar } from "@/components/ai/use-ai-sidebar"
 import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
@@ -59,13 +58,12 @@ import {
   type NodeCategory,
   type SmartNodeData,
 } from "@/lib/canvas"
+import { useAutosave, type SaveStatusValue } from "@/components/canvas/use-autosave"
 import { useLiveCanvas } from "@/lib/liveblocks/use-live-canvas"
 import { useLiveCursors } from "@/lib/liveblocks/use-live-cursors"
 import { LiveRoom } from "@/lib/liveblocks/room-provider"
 import type { ProjectListItem } from "@/lib/projects"
 import type { ShareLinkItem } from "@/lib/share"
-
-type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
 
 interface SelectedElement {
   kind: "edge" | "node" | "group"
@@ -196,12 +194,6 @@ function BoardEditorInner({
   )
   // Selected smart nodes (never boxes): the set a new box would wrap.
   const [groupableIds, setGroupableIds] = React.useState<string[]>([])
-  const [status, setStatus] = React.useState<SaveStatusValue>("clean")
-  const [saveError, setSaveError] = React.useState<string | null>(null)
-
-  const [isPending, startTransition] = React.useTransition()
-  // Bumped on every real edit so a save can tell if edits landed mid-flight.
-  const editVersion = React.useRef(0)
   const { getViewport, setViewport } = useReactFlow()
   const store = useStoreApi()
   // A node just added from the toolbar, waiting for its first measurement.
@@ -211,12 +203,24 @@ function BoardEditorInner({
     y: number
   } | null>(null)
 
-  const markDirty = React.useCallback(() => {
-    editVersion.current += 1
-    setStatus("dirty")
-  }, [])
+  // Always current snapshot, read by autosave when it flushes. Kept in a ref
+  // because autosave is set up before `useLiveCanvas` provides the elements.
+  const snapshotRef = React.useRef<CanvasSnapshot>({ nodes: [], edges: [] })
 
-  // Storage changes (ours or another client's) mark the board unsaved.
+  // The debounce, in-flight guard and status machine all live in the hook.
+  const {
+    status,
+    error: saveError,
+    markDirty,
+    saveNow,
+  } = useAutosave({
+    projectId,
+    getSnapshot: () => snapshotRef.current,
+    enabled: isOwner,
+  })
+
+  // Storage changes (ours or another client's) mark the board unsaved and
+  // (re)start the autosave debounce.
   const {
     nodes,
     edges,
@@ -226,6 +230,10 @@ function BoardEditorInner({
     setEdges,
     addEdge,
   } = useLiveCanvas({ onMutate: isOwner ? markDirty : undefined })
+  // Synced in an effect (writing a ref during render is disallowed).
+  React.useEffect(() => {
+    snapshotRef.current = { nodes, edges }
+  }, [nodes, edges])
   const { onPointerMove, onPointerLeave } = useLiveCursors()
 
   const handleSpawnResult = React.useCallback(
@@ -538,26 +546,6 @@ function BoardEditorInner({
     ])
   }
 
-  const handleSave = () => {
-    if (isPending || status === "saving" || status === "clean") return
-    startTransition(async () => {
-      const savedVersion = editVersion.current
-      setStatus("saving")
-      setSaveError(null)
-      const result = await saveCanvas({
-        projectId,
-        snapshot: { nodes, edges },
-      })
-      if (result.ok) {
-        // Edits made while saving aren't in the saved snapshot; stay dirty.
-        setStatus(editVersion.current === savedVersion ? "saved" : "dirty")
-      } else {
-        setStatus("error")
-        setSaveError(result.error)
-      }
-    })
-  }
-
   // Guests get a read-only canvas, no add-node toolbar and no property panel
   // when viewing; editing guests get the same canvas tools as the owner.
   const board = (
@@ -667,8 +655,10 @@ function BoardEditorInner({
           <SaveStatus status={status} error={saveError} />
           <Button
             size="sm"
-            onClick={handleSave}
-            disabled={isPending || status === "clean" || status === "saved"}
+            onClick={saveNow}
+            disabled={
+              status === "saving" || status === "clean" || status === "saved"
+            }
           >
             <Save className="h-4 w-4" />
             {status === "saving" ? "Saving…" : "Save"}
