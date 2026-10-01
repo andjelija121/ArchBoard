@@ -94,27 +94,43 @@ export type GeneratedResult = z.infer<typeof generatedResultSchema>
 
 ### 2. `trigger/generate-infra.ts` — background job (Groq)
 
-The **only** LLM call site. Uses `groq-sdk` with
-`response_format: { type: "json_object" }`, model
-`openai/gpt-oss-120b` (configurable via `GROQ_MODEL`), temperature 0.2.
+The **only** LLM call site. Task id `generate-infra`, `retry.maxAttempts: 2`.
+Uses `groq-sdk` with `response_format: { type: "json_object" }`, model
+`openai/gpt-oss-120b` (configurable via `GROQ_MODEL`), temperature 0.4.
 
 The system prompt teaches the model about both nodes (with category
 mapping) and groups (with `nodeIndices` referencing the nodes array).
 The response is normalized (handles bare arrays, `{ nodes }`, or
 arbitrary wrapper keys) and Zod-validated against `generatedResultSchema`.
 
+Output is `GenerateInfraOutput`: `{ ok: true, result }` or
+`{ ok: false, error }`. Expected refusals (empty nodes, Groq
+`json_validate_failed`) are returned as `ok: false` with a friendly
+sentence. Anything else throws, so Trigger.dev retries it and then marks
+the run FAILED; internal error text never reaches the user.
+
 ### 3. `app/editor/[projectId]/ai-actions.ts` — Server Action handoff
 
 Clerk auth → Zod validation → owner-scoped Prisma check →
-`tasks.trigger("generate-infra", { prompt })` → returns
-`{ ok: true, runId, accessToken }`. Never awaits the LLM.
+`tasks.trigger<typeof generateInfraTask>("generate-infra", { prompt }, { ttl: "90s" })`
+→ returns `{ ok: true, runId, accessToken }` where `accessToken` is the
+handle's run-scoped read token. Never awaits the LLM. The TTL makes a run
+nobody picks up (worker not running) expire instead of pending forever.
 
 ### 4. `components/ai/use-ai-sidebar.ts` — realtime subscription
 
-Subscribes via `useRealtimeRun`. On `COMPLETED`: Zod-validates
-`run.output` with `generatedResultSchema`, calls `onSpawn(result)`,
-patches assistant message to success. On terminal failure: patches
-to error.
+`submit` calls the action; on `ok` it stores the run (ref + state) and
+the pending message stays pending. `useRealtimeRun` follows the run and
+`onComplete` settles it, once (`finish` is a no-op after the first call):
+
+- `COMPLETED`: `run.output` is validated again (`ok: true` → `onSpawn(result)`
+  and success message; `ok: false` → that message as an error).
+- `EXPIRED` → "The generator didn't pick this up in time…"; `TIMED_OUT` →
+  "Generation timed out…"; any other terminal status → "Generation failed…".
+- Subscription error → "Lost connection to the generator. Please retry."
+
+If the action itself rejects, or returns `ok: false`, the message becomes
+an error and `isSending` clears so Retry is never blocked.
 
 `UseAiSidebar` return type unchanged. `UseAiSidebarOptions` accepts
 `onSpawn: (result: GeneratedResult) => void`.
@@ -131,9 +147,13 @@ existing Unit 07 save path.
 
 | Var | Used by | Where to get it |
 | --- | --- | --- |
-| `TRIGGER_SECRET_KEY` | Trigger.dev SDK | Trigger.dev dashboard |
-| `GROQ_API_KEY` | `trigger/generate-infra.ts` | console.groq.com/keys |
+| `TRIGGER_SECRET_KEY` | Server Action (Next.js env) | Trigger.dev dashboard |
+| `GROQ_API_KEY` | `trigger/generate-infra.ts` (read by the Trigger.dev worker) | console.groq.com/keys |
 | `GROQ_MODEL` *(optional)* | trigger task | default `openai/gpt-oss-120b` |
+
+Locally the worker is `npx trigger.dev@4.7.0 dev`; it loads `.env.local`.
+For a deployed environment, `GROQ_API_KEY` must be set in the Trigger.dev
+project's environment variables, not only in Vercel.
 
 ### Failure taxonomy
 
@@ -143,14 +163,18 @@ existing Unit 07 save path.
 | Not the owner / missing | "Project not found." |
 | Empty/too-long prompt | Zod message |
 | Couldn't enqueue job | "Couldn't start generation. Please try again." |
-| Groq error / bad JSON / empty nodes | "I can only add infrastructure nodes..." |
-| Run failed / timed out | "Generation failed/timed out. Please try again." |
+| Server Action rejects (network/server) | "Couldn't reach the generator. Please try again." |
+| Empty nodes / Groq `json_validate_failed` | "I can only add infrastructure nodes..." |
+| Other Groq error, bad JSON, or schema failure (including out-of-range group indices) | run FAILED → "Generation failed. Please try again." |
+| Run expired in the queue | "The generator didn't pick this up in time. Make sure it's running, then retry." |
+| Run timed out | "Generation timed out. Please try again." |
 | Subscription error | "Lost connection to the generator. Please retry." |
 
 ## Dependencies
 
 - `@trigger.dev/sdk` — background job orchestration
 - `@trigger.dev/react-hooks` — `useRealtimeRun` subscription
+- `@trigger.dev/build` (dev) — Trigger.dev build tooling
 - `groq-sdk` — Groq LLM client
 - `zod` — already installed
 

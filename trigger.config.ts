@@ -5,5 +5,5 @@ export default defineConfig({
   // Task files live in trigger/ at the repo root, matching the `trigger/`
   // boundary in architecture.md / code-standards.md (this project has no src/).
   dirs: ["./trigger"],
-  maxDuration: 60, // seconds — a Gemini Flash call is well under this
+  maxDuration: 60, // seconds — a Groq call is well under this
 })

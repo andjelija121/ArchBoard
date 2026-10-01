@@ -34,15 +34,14 @@
 
 ## AI and Background Task Model
 
-* User prompts from the chat sidebar are sent to a Next.js Server Action, which hands the payload to a Trigger.dev background job and returns a run ID + scoped public token to the client.
-* Trigger.dev orchestrates the call to Groq using JSON-mode output. The response is Zod-validated against `generatedResultSchema` to guarantee a payload matching the node and group schemas. A malformed response marks the run as FAILED and surfaces as an error on the client.
+* User prompts from the chat sidebar are sent to the `generateNodes` Server Action (`app/editor/[projectId]/ai-actions.ts`). It authenticates, validates, checks ownership, hands the prompt to the `generate-infra` Trigger.dev task (90s queue TTL), and returns `{ ok: true, runId, accessToken }` (the token is read-scoped to that run). It never awaits the LLM.
+* The `generate-infra` task (`trigger/generate-infra.ts`) is the only LLM call site. It calls Groq in JSON mode and Zod-validates the response against `generatedResultSchema`, which guarantees a payload matching the node and group schemas (including that every group `nodeIndices` entry points at a returned node). Expected refusals (e.g. a request for edges) are returned as `{ ok: false, error }`; unexpected failures throw, are retried once, and mark the run FAILED.
 * The AI assigns a `category` (e.g., "Gateway", "Database") to each generated node. The frontend UI uses this category to calculate the X-coordinate for "swimlane" spawning. The AI can also return optional groups that wrap related nodes in bounding boxes (Unit 10).
-* The client subscribes to the run via `useRealtimeRun` (SSE) and spawns nodes/groups on completion.
+* The client follows the run with `useRealtimeRun` (SSE), re-validates the task output with `generatedResultSchema`, and spawns nodes/groups on completion.
 
 ## Invariants
 
 1. **AI Append-Only Rule**: The AI backend must never mutate, edit, or delete existing nodes or edges on the canvas. It is strictly an append-only scaffolding generator.
-2. **Synchronous LLM Ban**: No direct, synchronous LLM network calls are permitted within Next.js API routes or Server Actions. All AI requests must be delegated to Trigger.dev to prevent Vercel serverless function timeouts.
-3. **Single Source of Truth (Active Session)**: During an active collaboration session, Liveblocks is the absolute source of truth for the canvas. The PostgreSQL database is only used for initial loading and persistent snapshot saving, never for real-time state calculation.
+2. **Synchronous LLM Ban**: No direct, synchronous LLM network calls are permitted within Next.js API routes or Server Actions. All AI requests must be delegated to Trigger.dev to prevent Vercel serverless function timeouts.3. **Single Source of Truth (Active Session)**: During an active collaboration session, Liveblocks is the absolute source of truth for the canvas. The PostgreSQL database is only used for initial loading and persistent snapshot saving, never for real-time state calculation.
 4. **Denormalized Canvas State**: Canvas data (nodes and edges) must always be stored in the database as a single `JSONB` object payload. The codebase must never attempt to normalize canvas nodes and edges into separate SQL tables, as this would break the React Flow and Liveblocks syncing mechanisms.
 </content>

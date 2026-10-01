@@ -5,26 +5,31 @@ change.
 
 ## Current Phase
 
-- Unit 12 (AI generation backend) implemented with Trigger.dev + Groq. AI now generates both nodes AND groups (bounding boxes). Code complete, `tsc`/`build` pass. End-to-end browser testing needs a live Clerk session + Trigger.dev dev server + `GROQ_API_KEY`. Units 09–11 also awaiting browser verification.
+- Unit 12 (AI generation backend) implemented with Trigger.dev + Groq (Server Action enqueues, task calls Groq, client follows the run via `useRealtimeRun`). AI generates both nodes AND groups (bounding boxes). Code complete, `tsc` and `npm run build` pass. End-to-end browser testing needs a live Clerk session + the Trigger.dev worker (`npx trigger.dev@4.7.0 dev`) + `GROQ_API_KEY`. Units 09–11 also awaiting browser verification.
 
 ## Current Goal
 
-- Browser-verify Units 09–12 (needs a live Clerk session + `npx trigger.dev@latest dev` + `GROQ_API_KEY`).
+- Browser-verify Units 09–12 (needs a live Clerk session + `npx trigger.dev@4.7.0 dev` + `GROQ_API_KEY`).
 
 ## Completed
+
+- **Fix: hydration mismatch on Clerk `UserButton` (`editor-navbar.tsx`).** Clerk's `withClerk` wrapper returns `null` until clerk-js has loaded. The server never has it loaded, but on the client clerk-js can finish before hydration, so the first client render added a `<div data-clerk-component="UserButton">` the server didn't send. It's a timing race, so it appears intermittently. `UserButton` now renders through `ClientUserButton`, which shows a same-size (`size-7`) placeholder until after hydration (`useSyncExternalStore` client flag, no effect). `tsc` and eslint pass; not re-checked in a browser.
 
 - **Unit 12: AI generation backend (`context/feature-specs/12-ai-backend.md`).** Pivoted from Gemini to **Groq** due to Gemini model instability. Architecture: Trigger.dev background job + Groq + `useRealtimeRun` SSE subscription. AI now generates **both nodes AND groups** (bounding boxes).
   - `lib/canvas.ts`: added `MAX_GENERATED_NODES` (12), `MAX_GENERATED_GROUPS` (6), `generatedNodeSchema`, `generatedGroupSchema` (`{ label, color?, nodeIndices }`), `generatedResultSchema` (`{ nodes, groups? }`), and their types. Group schema references `GROUP_COLORS` from Unit 10.
   - `trigger/generate-infra.ts`: the **only** LLM call site (invariant #2). Uses `groq-sdk` with `response_format: { type: "json_object" }` against `openai/gpt-oss-120b` (configurable via `GROQ_MODEL`). System prompt teaches the model about nodes (with category mapping) and groups (with `nodeIndices`). Response normalized (handles bare arrays, `{ nodes }`, or arbitrary wrappers) and Zod-validated against `generatedResultSchema`.
-  - `app/editor/[projectId]/ai-actions.ts`: `generateNodes` Server Action. Clerk auth → Zod validation → owner-scoped Prisma check → `tasks.trigger("generate-infra")` → returns `{ ok: true, runId, accessToken }`. Never awaits the LLM (invariant #2 satisfied).
-  - `components/ai/use-ai-sidebar.ts`: `useRealtimeRun` subscribes to run status. On `COMPLETED`: Zod-validates output with `generatedResultSchema`, calls `onSpawn(result)` with full `GeneratedResult` (nodes + groups), patches assistant message to `success` with summary listing nodes and groups. `UseAiSidebar` return type unchanged. `onSpawn` now accepts `GeneratedResult` instead of `GeneratedNode[]`.
+  - **Trigger.dev reconnected.** An interim version called Groq directly from the Server Action (breaking invariant #2); that is reverted. The invariant is enforced again.
+  - `app/editor/[projectId]/ai-actions.ts`: `generateNodes` Server Action. Clerk auth → Zod validation → owner-scoped Prisma check → `tasks.trigger<typeof generateInfraTask>("generate-infra", { prompt }, { ttl: "90s" })` → returns `{ ok: true, runId, accessToken }` (the handle's run-scoped read token). Enqueue failures return a friendly error. Never awaits the LLM.
+  - `trigger/generate-infra.ts`: the only LLM call site. Returns `GenerateInfraOutput` (`{ ok: true, result } | { ok: false, error }`): expected refusals are returned as data with friendly text; unexpected failures throw (retried once, then FAILED). Default model aligned to `openai/gpt-oss-120b`, temperature 0.4 (it had drifted to `gpt-oss-20b` / 0.2).
+  - `components/ai/use-ai-sidebar.ts`: `submit` calls the action, stores the run, and `useRealtimeRun`'s `onComplete` settles it exactly once: re-validates `run.output`, calls `onSpawn(result)` and patches to `success`, or patches to `error` for refusals, EXPIRED, TIMED_OUT, other terminal statuses and subscription errors. A rejected action also patches to `error` and clears `isSending`, so Retry is never blocked. `UseAiSidebar` return type unchanged.
+  - Review fix: `generatedResultSchema` now refines that every group `nodeIndices` entry is `< nodes.length`, so an out-of-range index fails validation instead of being silently dropped at spawn time.
   - `components/canvas/board-editor.tsx`: `handleSpawnResult` replaces `handleSpawnNodes`. Creates smart nodes via `nextLanePosition`, then for each group resolves `nodeIndices` → member IDs → `computeGroupBounds` → group node (`type: "group"`, `zIndex: -1`, `{ label, color, childIds }`). Groups prepended, nodes appended. `markDirty()`.
   - `context/architecture.md`: AI Engine = Groq (`groq-sdk`, `openai/gpt-oss-120b`). Background Tasks = Trigger.dev. Synchronous LLM Ban invariant restored.
   - Deps: `groq-sdk`, `@trigger.dev/sdk`, `@trigger.dev/react-hooks`, `@trigger.dev/build`.
-  - Env vars: `TRIGGER_SECRET_KEY`, `GROQ_API_KEY`. Optional: `GROQ_MODEL`.
-  - **Run prerequisite:** Trigger.dev dev server (`npx trigger.dev@latest dev`) must be running.
+  - Env vars: `TRIGGER_SECRET_KEY` (Next.js server env), `GROQ_API_KEY` (read by the worker). Optional: `GROQ_MODEL`. For a deployed environment, set `GROQ_API_KEY` in the Trigger.dev project env vars too.
+  - **Run prerequisite:** the Trigger.dev worker (`npx trigger.dev@4.7.0 dev`) must be running. If it isn't, the run expires after 90s and the sidebar shows an error.
   - Verified: `tsc --noEmit` and `npm run build` pass with zero errors.
-  - **Not verified:** end-to-end AI generation (needs live Clerk session + Trigger.dev dev server + `GROQ_API_KEY`). Still to check: node spawning in swimlanes, group spawning with correct bounds/colors, pending → success with node+group summary, error states and Retry, append-only, non-owner rejection, save/reload, responsive.
+  - **Not verified:** end-to-end AI generation (needs live Clerk session + the Trigger.dev worker + `GROQ_API_KEY`). Also check: the run appears in the Trigger.dev dashboard, a prompt asking for edges shows the friendly refusal, stopping the worker leads to the expiry error after ~90s, and Retry works after each error. Still to check: node spawning in swimlanes, group spawning with correct bounds/colors, pending → success with node+group summary, error states and Retry, append-only, non-owner rejection, save/reload, responsive.
 
 - **Unit 12 spec written (`context/feature-specs/12-ai-backend.md`).** Originally specced with Gemini; pivoted to Groq after Gemini model instability. Extended to generate groups (bounding boxes) alongside nodes. See the Unit 12 implementation entry above for details.
 

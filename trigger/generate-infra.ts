@@ -7,9 +7,10 @@ import {
   MAX_GENERATED_GROUPS,
   MAX_GENERATED_NODES,
   NODE_CATEGORIES,
+  type GeneratedResult,
 } from "@/lib/canvas"
 
-const MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b"
+const MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-120b"
 
 const SYSTEM_PROMPT = `You are an infrastructure diagram scaffolder.
 You add ONLY the components the user asks for — nothing more, nothing less.
@@ -36,36 +37,27 @@ CRITICAL RULES:
 - If asked to create connections/edges/links, return { "nodes": [] }.
 - Max ${MAX_GENERATED_NODES} nodes, max ${MAX_GENERATED_GROUPS} groups.`
 
-export const generateInfraTask = task({
-  id: "generate-infra",
-  run: async (payload: { prompt: string }) => {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
+const NODES_ONLY_ERROR =
+  'I can only add infrastructure nodes. Try something like "Add a Redis cache and a message queue". To connect nodes, drag between their handles.'
 
-    const response = await groq.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: payload.prompt },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.2,
-    })
+// Expected refusals come back as data so the user sees a friendly sentence.
+// Anything thrown is an unexpected failure (retried, then shown generically).
+export type GenerateInfraOutput =
+  | { ok: true; result: GeneratedResult }
+  | { ok: false; error: string }
 
-    const text = response.choices[0]?.message?.content ?? "{}"
-    const rawJson: unknown = JSON.parse(text)
-    const obj = normalizeResponse(rawJson)
-    const result = generatedResultSchema.parse(obj)
-
-    return result
-  },
-})
-
-function normalizeResponse(json: unknown): { nodes: unknown[]; groups?: unknown[] } {
+function normalizeResponse(json: unknown): {
+  nodes: unknown[]
+  groups?: unknown[]
+} {
   if (Array.isArray(json)) return { nodes: json }
   if (json && typeof json === "object") {
     const rec = json as Record<string, unknown>
     if (Array.isArray(rec.nodes)) {
-      return { nodes: rec.nodes, groups: Array.isArray(rec.groups) ? rec.groups : undefined }
+      return {
+        nodes: rec.nodes,
+        groups: Array.isArray(rec.groups) ? rec.groups : undefined,
+      }
     }
     for (const val of Object.values(rec)) {
       if (Array.isArray(val)) return { nodes: val }
@@ -73,3 +65,36 @@ function normalizeResponse(json: unknown): { nodes: unknown[]; groups?: unknown[
   }
   return { nodes: [] }
 }
+
+export const generateInfraTask = task({
+  id: "generate-infra",
+  retry: { maxAttempts: 2 },
+  run: async (payload: { prompt: string }): Promise<GenerateInfraOutput> => {
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+
+    let text: string
+    try {
+      const response = await groq.chat.completions.create({
+        model: MODEL,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: payload.prompt },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.4,
+      })
+      text = response.choices[0]?.message?.content ?? "{}"
+    } catch (error) {
+      // Groq rejects off-topic prompts that can't be coerced into JSON.
+      if (error instanceof Error && error.message.includes("json_validate_failed")) {
+        return { ok: false, error: NODES_ONLY_ERROR }
+      }
+      throw error
+    }
+
+    const obj = normalizeResponse(JSON.parse(text))
+    if (obj.nodes.length === 0) return { ok: false, error: NODES_ONLY_ERROR }
+
+    return { ok: true, result: generatedResultSchema.parse(obj) }
+  },
+})

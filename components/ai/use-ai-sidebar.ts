@@ -8,10 +8,41 @@ import {
   useSyncExternalStore,
 } from "react"
 
+import { useRealtimeRun } from "@trigger.dev/react-hooks"
+import { z } from "zod"
+
 import { generateNodes } from "@/app/editor/[projectId]/ai-actions"
-import type { GeneratedResult } from "@/lib/canvas"
+import { generatedResultSchema, type GeneratedResult } from "@/lib/canvas"
+import type { generateInfraTask } from "@/trigger/generate-infra"
 
 import { createMessageId, type ChatMessage } from "./ai-types"
+
+interface ActiveRun {
+  runId: string
+  accessToken: string
+  assistantId: string
+}
+
+// Validated here, not trusted: this is the boundary where task output enters
+// the client before it is allowed to spawn anything on the canvas.
+const taskOutputSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), result: generatedResultSchema }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+])
+
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
+  "COMPLETED",
+  "CANCELED",
+  "FAILED",
+  "CRASHED",
+  "INTERRUPTED",
+  "SYSTEM_FAILURE",
+  "EXPIRED",
+  "TIMED_OUT",
+])
+
+const GENERIC_ERROR = "Generation failed. Please try again."
+const SUBSCRIPTION_ERROR = "Lost connection to the generator. Please retry."
 
 const LG_QUERY = "(min-width: 1024px)"
 function subscribeLg(onStoreChange: () => void) {
@@ -85,6 +116,70 @@ export function useAiSidebar(options: UseAiSidebarOptions): UseAiSidebar {
     [isDesktop],
   )
 
+  // The run being followed. The ref is the source of truth for callbacks; the
+  // state only drives the subscription (id, token, enabled).
+  const [activeRun, setActiveRun] = useState<ActiveRun | null>(null)
+  const activeRunRef = useRef<ActiveRun | null>(null)
+
+  // Resolves the pending assistant message and releases the composer. A no-op
+  // once the run is settled, so a duplicate completion callback does nothing.
+  const finish = useCallback(
+    (patch: Pick<ChatMessage, "status" | "content">) => {
+      const current = activeRunRef.current
+      if (!current) return
+      activeRunRef.current = null
+      setActiveRun(null)
+      setMessages((prev) =>
+        prev.map((m) => (m.id === current.assistantId ? { ...m, ...patch } : m)),
+      )
+      setIsSending(false)
+    },
+    [],
+  )
+
+  useRealtimeRun<typeof generateInfraTask>(activeRun?.runId, {
+    accessToken: activeRun?.accessToken,
+    enabled: activeRun !== null,
+    onComplete: (run, err) => {
+      const current = activeRunRef.current
+      if (!current || run.id !== current.runId) return
+
+      if (err) {
+        console.error("useAiSidebar: realtime subscription failed", err)
+        finish({ status: "error", content: SUBSCRIPTION_ERROR })
+        return
+      }
+      if (!TERMINAL_STATUSES.has(run.status)) return
+
+      if (run.status === "COMPLETED") {
+        const output = taskOutputSchema.safeParse(run.output)
+        if (!output.success) {
+          console.error("useAiSidebar: invalid task output", output.error)
+          finish({ status: "error", content: GENERIC_ERROR })
+        } else if (output.data.ok) {
+          optionsRef.current.onSpawn(output.data.result)
+          finish({
+            status: "success",
+            content: buildSuccessMessage(output.data.result),
+          })
+        } else {
+          finish({ status: "error", content: output.data.error })
+        }
+        return
+      }
+
+      finish({
+        status: "error",
+        content:
+          run.status === "EXPIRED"
+            ? "The generator didn't pick this up in time. Make sure it's running, then retry."
+            : run.status === "TIMED_OUT"
+              ? "Generation timed out. Please try again."
+              : GENERIC_ERROR,
+      })
+    },
+  })
+
   const submit = useCallback(
     async (prompt?: string) => {
       const text = (prompt ?? input).trim()
@@ -111,28 +206,34 @@ export function useAiSidebar(options: UseAiSidebarOptions): UseAiSidebar {
       setInput("")
       setIsSending(true)
 
-      const res = await generateNodes({
-        projectId: optionsRef.current.projectId,
-        prompt: text,
-      })
+      const fail = (content: string) =>
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, status: "error" as const, content } : m,
+          ),
+        )
 
-      if (res.ok) {
-        optionsRef.current.onSpawn(res.result)
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, status: "success" as const, content: buildSuccessMessage(res.result) }
-              : m,
-          ),
-        )
-      } else {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, status: "error" as const, content: res.error }
-              : m,
-          ),
-        )
+      try {
+        const res = await generateNodes({
+          projectId: optionsRef.current.projectId,
+          prompt: text,
+        })
+
+        if (res.ok) {
+          // The run now owns the pending message; it settles via onComplete.
+          const run = {
+            runId: res.runId,
+            accessToken: res.accessToken,
+            assistantId,
+          }
+          activeRunRef.current = run
+          setActiveRun(run)
+          return
+        }
+        fail(res.error)
+      } catch (error) {
+        console.error("useAiSidebar: generateNodes rejected", error)
+        fail("Couldn't reach the generator. Please try again.")
       }
       setIsSending(false)
     },

@@ -29,7 +29,7 @@ The fastest path is the CLI's own wizard, which performs every mechanical step b
 and also offers to install the MCP server and these agent skills:
 
 ```bash
-npx trigger.dev@latest init
+npx trigger.dev@4.7.0 init
 ```
 
 Prefer `init` when you can. Do the manual steps further down when `init` does not fit
@@ -41,14 +41,14 @@ The CLI can start account creation, but a person must verify their email and aut
 access. In an agent session, start a resumable login instead of blocking on the CLI:
 
 ```bash
-npx trigger.dev@latest login --email user@example.com --name "Alex Smith" --no-browser --no-wait
+npx trigger.dev@4.7.0 login --email user@example.com --name "Alex Smith" --no-browser --no-wait
 ```
 
 Give the printed URL to the user and ask them to complete sign-in and authorization.
 After they confirm, resume the saved authorization:
 
 ```bash
-npx trigger.dev@latest login --no-browser
+npx trigger.dev@4.7.0 login --no-browser
 ```
 
 Do not create accounts or approve CLI access on the user's behalf. Once authenticated,
@@ -63,7 +63,7 @@ create the organization in its dashboard first.
 For an interactive terminal:
 
 ```bash
-npx trigger.dev@latest login
+npx trigger.dev@4.7.0 login
 ```
 
 For an agent or headless terminal, use the resumable flow described above. Add
@@ -76,8 +76,8 @@ Pin both to the same version as the `trigger.dev` CLI you run; the CLI warns on 
 mismatch during `dev`/`deploy`.
 
 ```bash
-npm add @trigger.dev/sdk@latest
-npm add --save-dev @trigger.dev/build@latest
+npm add @trigger.dev/sdk@4.7.0
+npm add --save-dev @trigger.dev/build@4.7.0
 ```
 
 ### 3. Write `trigger.config.ts`
@@ -90,7 +90,7 @@ import { defineConfig } from "@trigger.dev/sdk";
 
 export default defineConfig({
   project: "<project ref>", // e.g. "proj_abc123", from the dashboard
-  dirs: ["./src/trigger"], // where your tasks live
+  dirs: ["./trigger"], // where your tasks live
   maxDuration: 3600,
   retries: {
     enabledInDev: false,
@@ -109,7 +109,7 @@ Create the directory that matches `dirs` and export a task from it. Every task m
 a named export with a project-unique `id`.
 
 ```ts
-// src/trigger/example.ts
+// trigger/example.ts
 import { task } from "@trigger.dev/sdk";
 
 export const helloWorld = task({
@@ -149,7 +149,7 @@ TRIGGER_SECRET_KEY=tr_dev_sk_xxxxxxxx
 ### 7. Run the dev server
 
 ```bash
-npx trigger.dev@latest dev
+npx trigger.dev@4.7.0 dev
 ```
 
 Leave it running. Tasks register with the dashboard, where the user can fire a test run

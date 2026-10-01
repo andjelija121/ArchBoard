@@ -185,17 +185,26 @@ export const generatedGroupSchema = z.object({
 })
 export type GeneratedGroup = z.infer<typeof generatedGroupSchema>
 
-export const generatedResultSchema = z.object({
-  nodes: z
-    .array(generatedNodeSchema)
-    .min(1, "The model returned no nodes.")
-    .max(MAX_GENERATED_NODES, "The model returned too many nodes."),
-  groups: z
-    .array(generatedGroupSchema)
-    .max(MAX_GENERATED_GROUPS, "The model returned too many groups.")
-    .optional()
-    .default([]),
-})
+export const generatedResultSchema = z
+  .object({
+    nodes: z
+      .array(generatedNodeSchema)
+      .min(1, "The model returned no nodes.")
+      .max(MAX_GENERATED_NODES, "The model returned too many nodes."),
+    groups: z
+      .array(generatedGroupSchema)
+      .max(MAX_GENERATED_GROUPS, "The model returned too many groups.")
+      .optional()
+      .default([]),
+  })
+  .refine(
+    ({ nodes, groups }) =>
+      groups.every((g) => g.nodeIndices.every((i) => i < nodes.length)),
+    {
+      message: "The model grouped a node that doesn't exist.",
+      path: ["groups"],
+    }
+  )
 export type GeneratedResult = z.infer<typeof generatedResultSchema>
 
 export const generatedNodesSchema = z

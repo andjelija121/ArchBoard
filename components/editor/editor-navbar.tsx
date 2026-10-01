@@ -7,6 +7,25 @@ import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 
+const subscribeNoop = () => () => {}
+
+// Clerk's UserButton renders nothing until clerk-js has loaded. On the server
+// that is always true, but on the client clerk-js can finish before hydration,
+// so the first client render would add markup the server never sent. Rendering
+// it only after hydration keeps both renders identical.
+function ClientUserButton() {
+  const isClient = React.useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false
+  )
+  return isClient ? (
+    <UserButton />
+  ) : (
+    <span aria-hidden className="size-7 shrink-0" />
+  )
+}
+
 interface EditorNavbarProps {
   isSidebarOpen: boolean
   onToggleSidebar: () => void
@@ -53,7 +72,7 @@ export function EditorNavbar({
 
       <div className="flex flex-1 items-center justify-end gap-2">
         {actionsSlot}
-        <UserButton />
+        <ClientUserButton />
       </div>
     </nav>
   )
