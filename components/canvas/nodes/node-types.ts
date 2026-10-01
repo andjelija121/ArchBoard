@@ -1,3 +1,4 @@
+import { GroupNode } from "@/components/canvas/groups/group-node"
 import { SmartNode } from "@/components/canvas/nodes/smart-node"
 
 // Module-level so React Flow sees a stable reference across renders.
@@ -8,4 +9,5 @@ export const nodeTypes = {
   cache: SmartNode,
   queue: SmartNode,
   database: SmartNode,
+  group: GroupNode,
 }

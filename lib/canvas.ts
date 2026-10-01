@@ -139,6 +139,73 @@ export function createEdgeId(): string {
   return `e_${crypto.randomUUID()}`
 }
 
+export const GROUP_NODE_TYPE = "group"
+
+export function createGroupId(): string {
+  return `g_${crypto.randomUUID()}`
+}
+
+export const GROUP_COLORS = ["slate", "cyan", "amber", "green", "purple"] as const
+
+export type GroupColor = (typeof GROUP_COLORS)[number]
+
+export const DEFAULT_GROUP_COLOR: GroupColor = "slate"
+
+export const GROUP_PADDING = 24 // gap between members and the box edge
+export const GROUP_HEADER = 28 // extra top room for the label chip
+export const GROUP_MIN_WIDTH = 160
+export const GROUP_MIN_HEIGHT = 120
+// Negative so a box draws behind edges as well as its members.
+export const GROUP_Z_INDEX = -1
+
+export const DEFAULT_GROUP_LABEL = "Group"
+
+/**
+ * The `data` payload of a bounding box. Membership lives only here: members
+ * keep absolute coordinates and never point back at the box.
+ */
+export const groupNodeDataSchema = z.object({
+  label: z.string().min(1).max(80),
+  color: z.enum(GROUP_COLORS).default(DEFAULT_GROUP_COLOR),
+  childIds: z.array(z.string()).default([]),
+})
+
+export type GroupNodeData = z.infer<typeof groupNodeDataSchema>
+
+export interface GroupBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface MeasuredNode {
+  position: { x: number; y: number }
+  measured?: { width?: number; height?: number }
+}
+
+/** Smallest box (with padding and header room) enclosing the members. */
+export function computeGroupBounds(
+  members: readonly MeasuredNode[]
+): GroupBounds {
+  const rects = members.map((node) => ({
+    x: node.position.x,
+    y: node.position.y,
+    width: node.measured?.width ?? NODE_WIDTH,
+    height: node.measured?.height ?? NODE_HEIGHT,
+  }))
+  const minX = Math.min(...rects.map((r) => r.x))
+  const minY = Math.min(...rects.map((r) => r.y))
+  const maxX = Math.max(...rects.map((r) => r.x + r.width))
+  const maxY = Math.max(...rects.map((r) => r.y + r.height))
+  return {
+    x: minX - GROUP_PADDING,
+    y: minY - GROUP_PADDING - GROUP_HEADER,
+    width: maxX - minX + GROUP_PADDING * 2,
+    height: maxY - minY + GROUP_PADDING * 2 + GROUP_HEADER,
+  }
+}
+
 /** Validates untrusted JSON; a null or malformed column is an empty board. */
 export function parseCanvas(value: unknown): CanvasSnapshot {
   if (value === null || value === undefined) return EMPTY_SNAPSHOT

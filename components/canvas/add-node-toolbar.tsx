@@ -1,5 +1,6 @@
 "use client"
 
+import { Boxes } from "lucide-react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
@@ -15,10 +16,16 @@ import {
 
 interface AddNodeToolbarProps {
   onAdd: (category: NodeCategory) => void
+  onGroup: () => void
+  canGroup: boolean
 }
 
 /** Floating palette; buttons follow swimlane order, left to right. */
-export function AddNodeToolbar({ onAdd }: AddNodeToolbarProps) {
+export function AddNodeToolbar({
+  onAdd,
+  onGroup,
+  canGroup,
+}: AddNodeToolbarProps) {
   return (
     <div className="absolute bottom-4 left-1/2 z-30 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-md border border-border bg-card p-1 shadow-sm">
       {NODE_CATEGORIES.map((category) => {
@@ -41,6 +48,27 @@ export function AddNodeToolbar({ onAdd }: AddNodeToolbarProps) {
           </Button>
         )
       })}
+      <div className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+      {/* The hint sits on a wrapper: a disabled Button ignores pointer events,
+          so a title on it would never show. */}
+      <span
+        title={
+          canGroup
+            ? "Group selected nodes"
+            : "Select 2+ nodes to group: Ctrl/⌘ + click, or Shift + drag"
+        }
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Group selected nodes"
+          disabled={!canGroup}
+          onClick={onGroup}
+        >
+          <Boxes className="h-4 w-4" strokeWidth={1.5} />
+          <span className="text-xs font-medium">Group</span>
+        </Button>
+      </span>
     </div>
   )
 }
