@@ -3,13 +3,9 @@
 import * as React from "react"
 import {
   ReactFlowProvider,
-  addEdge,
-  useEdgesState,
-  useNodesState,
   useReactFlow,
   useStoreApi,
   type OnConnect,
-  type OnEdgesChange,
   type OnNodeDrag,
   type OnNodesChange,
   type OnSelectionChangeFunc,
@@ -22,6 +18,7 @@ import { AiSidebar } from "@/components/ai/ai-sidebar"
 import { useAiSidebar } from "@/components/ai/use-ai-sidebar"
 import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
 import { BoardCanvas } from "@/components/canvas/board-canvas"
+import { Cursors } from "@/components/canvas/cursors"
 import { HelpButton } from "@/components/canvas/help-dialog"
 import {
   PropertyPanel,
@@ -52,6 +49,9 @@ import {
   type NodeCategory,
   type SmartNodeData,
 } from "@/lib/canvas"
+import { useLiveCanvas } from "@/lib/liveblocks/use-live-canvas"
+import { useLiveCursors } from "@/lib/liveblocks/use-live-cursors"
+import { LiveRoom } from "@/lib/liveblocks/room-provider"
 import type { ProjectListItem } from "@/lib/projects"
 
 type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
@@ -141,30 +141,26 @@ function SaveStatus({
 }
 
 /**
- * Board client shell: owns the live canvas state and the save lifecycle, and
- * injects the title and save controls into the shared editor chrome.
+ * Board client shell: joins the board's Liveblocks room, owns the save
+ * lifecycle, and injects the title and save controls into the shared editor
+ * chrome. Canvas state itself lives in Liveblocks Storage while the room is open.
  */
 export function BoardEditor(props: BoardEditorProps) {
   return (
-    <ReactFlowProvider>
-      <BoardEditorInner {...props} />
-    </ReactFlowProvider>
+    <LiveRoom roomId={props.projectId} initialSnapshot={props.initialSnapshot}>
+      <ReactFlowProvider>
+        <BoardEditorInner {...props} />
+      </ReactFlowProvider>
+    </LiveRoom>
   )
 }
 
 function BoardEditorInner({
   projectId,
   projectName,
-  initialSnapshot,
   ownedProjects,
   sharedProjects,
 }: BoardEditorProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<BoardNode>(
-    initialSnapshot.nodes
-  )
-  const [edges, setEdges, onEdgesChange] = useEdgesState<BoardEdge>(
-    initialSnapshot.edges
-  )
   const [selection, setSelection] = React.useState<SelectedElement | null>(
     null
   )
@@ -185,10 +181,22 @@ function BoardEditorInner({
     y: number
   } | null>(null)
 
-  const markDirty = () => {
+  const markDirty = React.useCallback(() => {
     editVersion.current += 1
     setStatus("dirty")
-  }
+  }, [])
+
+  // Storage changes (ours or another client's) mark the board unsaved.
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    setNodes,
+    setEdges,
+    addEdge,
+  } = useLiveCanvas({ onMutate: markDirty })
+  const { onPointerMove, onPointerLeave } = useLiveCursors()
 
   const handleSpawnResult = React.useCallback(
     (result: GeneratedResult) => {
@@ -237,7 +245,6 @@ function BoardEditorInner({
 
         return [...current, ...createdGroups, ...createdNodes]
       })
-      markDirty()
     },
     [setNodes],
   )
@@ -272,19 +279,9 @@ function BoardEditorInner({
     )
   }
 
-  // Selection and measured-size changes aren't edits; a user-driven resize
-  // arrives as a `dimensions` change flagged `resizing`, and is.
+  // Dirty tracking happens in useLiveCanvas, off Storage changes.
   const handleNodesChange: OnNodesChange<BoardNode> = (changes) => {
     onNodesChange(changes)
-    if (
-      changes.some(
-        (c) =>
-          (c.type !== "select" && c.type !== "dimensions") ||
-          (c.type === "dimensions" && c.resizing)
-      )
-    ) {
-      markDirty()
-    }
 
     const pending = pendingReveal.current
     if (!pending) return
@@ -301,24 +298,16 @@ function BoardEditorInner({
     }
   }
 
-  const handleEdgesChange: OnEdgesChange<BoardEdge> = (changes) => {
-    onEdgesChange(changes)
-    if (changes.some((c) => c.type !== "select")) markDirty()
-  }
-
   const onConnect: OnConnect = (connection) => {
-    setEdges((current) =>
-      addEdge(
-        {
-          ...connection,
-          id: createEdgeId(),
-          type: ANNOTATED_EDGE_TYPE,
-          data: { ...DEFAULT_EDGE_DATA },
-        },
-        current
-      )
-    )
-    markDirty()
+    addEdge({
+      id: createEdgeId(),
+      source: connection.source,
+      target: connection.target,
+      sourceHandle: connection.sourceHandle,
+      targetHandle: connection.targetHandle,
+      type: ANNOTATED_EDGE_TYPE,
+      data: { ...DEFAULT_EDGE_DATA },
+    })
   }
 
   // Closing the panel also drops React Flow's own highlight so the two agree.
@@ -389,7 +378,6 @@ function BoardEditorInner({
         e.id === selection.id ? { ...e, data: { ...e.data, ...patch } } : e
       )
     )
-    markDirty()
   }
 
   const updateNodeData = (patch: Partial<SmartNodeData>) => {
@@ -399,7 +387,6 @@ function BoardEditorInner({
         n.id === selection.id ? { ...n, data: { ...n.data, ...patch } } : n
       )
     )
-    markDirty()
   }
 
   const updateGroupData = (patch: Partial<GroupNodeData>) => {
@@ -409,7 +396,6 @@ function BoardEditorInner({
         n.id === selection.id ? { ...n, data: { ...n.data, ...patch } } : n
       )
     )
-    markDirty()
   }
 
   // Members are independent nodes, so removing the box never touches them.
@@ -421,7 +407,6 @@ function BoardEditorInner({
     setEdges((current) =>
       current.filter((e) => e.source !== id && e.target !== id)
     )
-    markDirty()
     clearSelection()
   }
 
@@ -472,7 +457,6 @@ function BoardEditorInner({
     // so without this the overlay would sit on top of the box and block clicks
     // and connections on every member.
     store.setState({ nodesSelectionActive: false })
-    markDirty()
     setSelection({ kind: "group", id })
   }
 
@@ -511,8 +495,6 @@ function BoardEditorInner({
   const handleNodeDragStop: OnNodeDrag<BoardNode> = (_event, node) => {
     if (groupDrag.current?.id !== node.id) return
     groupDrag.current = null
-    // The member moves above don't pass through handleNodesChange.
-    markDirty()
   }
 
   const handleAddNode = (category: NodeCategory) => {
@@ -524,7 +506,6 @@ function BoardEditorInner({
       ...current,
       { id, type: category, position, data },
     ])
-    markDirty()
   }
 
   const handleSave = () => {
@@ -583,7 +564,7 @@ function BoardEditorInner({
               nodes={nodes}
               edges={edges}
               onNodesChange={handleNodesChange}
-              onEdgesChange={handleEdgesChange}
+              onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onEdgeClick={handleEdgeClick}
               onNodeClick={handleNodeClick}
@@ -592,7 +573,11 @@ function BoardEditorInner({
               onNodeDragStart={handleNodeDragStart}
               onNodeDrag={handleNodeDrag}
               onNodeDragStop={handleNodeDragStop}
-            />
+              onPointerMove={onPointerMove}
+              onPointerLeave={onPointerLeave}
+            >
+              <Cursors />
+            </BoardCanvas>
             <AddNodeToolbar
               onAdd={handleAddNode}
               onGroup={handleGroup}
