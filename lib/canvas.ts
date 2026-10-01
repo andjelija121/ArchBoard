@@ -107,6 +107,38 @@ export function createNodeId(): string {
   return `n_${crypto.randomUUID()}`
 }
 
+export const EDGE_PROTOCOLS = ["rest", "grpc", "websocket"] as const
+
+export type EdgeProtocol = (typeof EDGE_PROTOCOLS)[number]
+
+export const PROTOCOL_LABEL: Record<EdgeProtocol, string> = {
+  rest: "REST",
+  grpc: "gRPC",
+  websocket: "WebSocket",
+}
+
+export const ANNOTATED_EDGE_TYPE = "annotated"
+
+/** The `data` payload of every annotated edge; validated where it is rendered. */
+export const annotatedEdgeDataSchema = z.object({
+  protocol: z.enum(EDGE_PROTOCOLS).default("rest"),
+  async: z.boolean().default(false),
+  apiRoute: z.string().max(120).optional(),
+  loadEstimate: z.string().max(80).optional(),
+})
+
+export type AnnotatedEdgeData = z.infer<typeof annotatedEdgeDataSchema>
+
+/** Default data for a newly drawn edge. */
+export const DEFAULT_EDGE_DATA: AnnotatedEdgeData = {
+  protocol: "rest",
+  async: false,
+}
+
+export function createEdgeId(): string {
+  return `e_${crypto.randomUUID()}`
+}
+
 /** Validates untrusted JSON; a null or malformed column is an empty board. */
 export function parseCanvas(value: unknown): CanvasSnapshot {
   if (value === null || value === undefined) return EMPTY_SNAPSHOT
