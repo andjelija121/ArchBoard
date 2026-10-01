@@ -5,13 +5,31 @@ change.
 
 ## Current Phase
 
-- Unit 08 (smart nodes + swimlane helper + add-node toolbar) implemented per `context/feature-specs/08-smart-nodes.md`. Next is Unit 09: annotated edges + edge property panel.
+- Unit 09 (annotated edges + shared property panel) implemented per `context/feature-specs/09-annotated-edges.md`; code complete, `tsc`/`lint`/`build` pass, browser verification pending. Unit 10 (bounding boxes) is next in `00-build-plan.md`.
 
 ## Current Goal
 
-- Unit 09 (`00-build-plan.md`): custom annotated edge type and right-anchored edge property panel. Spec not yet written.
+- Hand-verify Unit 09 in a browser (needs a live Clerk session), then start Unit 10.
 
 ## Completed
+
+- **Unit 09: annotated edges + shared property panel (`context/feature-specs/09-annotated-edges.md`).**
+  - `lib/canvas.ts`: added `EDGE_PROTOCOLS`/`EdgeProtocol`, `PROTOCOL_LABEL`, `ANNOTATED_EDGE_TYPE`, `annotatedEdgeDataSchema`/`AnnotatedEdgeData` (`protocol` and `async` default to REST / sync, so legacy edges still parse), `DEFAULT_EDGE_DATA` and `createEdgeId()` (`e_` prefix). `canvasSnapshotSchema` is unchanged and still loose, so edge `type`/`data` survive save/load with no server, Prisma or migration change.
+  - `components/canvas/edges/annotated-edge.tsx` (new): memoized custom edge. Smooth-step path; resting stroke `--border-strong`, selected `--accent-primary` at width 2; async = `6 4` dash. `data` is validated with `safeParse` and falls back to `DEFAULT_EDGE_DATA`, so a corrupted edge renders as REST/sync instead of crashing. The midpoint badge (`EdgeLabelRenderer`, `rounded-sm border bg-card font-mono text-xs`) shows the protocol, plus a truncated `apiRoute` second line when set.
+  - `components/canvas/edges/edge-types.ts` (new): module-level `edgeTypes` map, so no "edgeTypes changed" warning.
+  - `components/canvas/edges/edge-click-context.ts` (new): the badge is portaled outside the edge SVG, so React Flow never fires `onEdgeClick` for it (the spec anticipated this). `BoardCanvas` provides its `onEdgeClick` through this context. The badge calls `addSelectedEdges([id])` on the store, so React Flow's highlight matches, then relays the click, keeping the edge itself presentational.
+  - `components/canvas/property-panel.tsx` (new): one `PropertyPanel` shell for edges and nodes. Right-anchored, `z-40`, `w-80 max-w-full`, `border-l bg-card`, header with title and `X`, `ScrollArea` body. Edge body: Protocol and Sync/Async `Button` segmented controls (active = default/accent variant, `aria-pressed`), mono API route input, load estimate input. Node body: category icon + label in the header (the only `--node-*` color in the panel), Label and mono Sub-label inputs. Props are presentational: the live element comes in, patches go out.
+  - Node label guard: `NodeFields` keeps a local `labelDraft`. A blank or whitespace-only draft is never written to the node (so the `min(1)` schema is never violated), and blur restores the stored label. The body is keyed by element id so nothing stale carries between selections. Inputs carry `maxLength` matching the schema caps (label 80, sub-label 80, route 120, load 80).
+  - `components/canvas/board-canvas.tsx`: registers `edgeTypes` and `defaultEdgeOptions` (annotated type + default data) and forwards `onEdgeClick`/`onNodeClick`/`onPaneClick`.
+  - `components/canvas/board-editor.tsx`: `selection` state, `onConnect` now builds a full annotated edge (`createEdgeId`, type, default data), click handlers, `updateEdgeData`/`updateNodeData` (patch + `markDirty()`), and `Escape` to close. The panel's element is resolved from live `nodes`/`edges`, so deleting the selected element unmounts the panel on its own.
+  - Deviations from the spec text (same behavior, different mechanism):
+    - One `<PropertyPanel>` instance instead of two conditional ones, so switching between elements doesn't re-run the entrance animation.
+    - Entrance uses `tw-animate-css` (`animate-in slide-in-from-right duration-200`, already a project dependency). A bare `transition-transform` doesn't play on mount.
+    - The arrowhead is a per-edge SVG `<marker>` owned by the edge, not React Flow's `markerEnd` prop. Shared markers can't change color with selection, and the spec wants the arrow to follow the stroke color.
+    - Added `clearSelection`, used by `X` and `Escape`. It also clears React Flow's `selected` flag so the canvas highlight doesn't linger after the panel closes. It goes through `setNodes`/`setEdges` directly, so it doesn't mark the board dirty.
+  - Review fix (keyboard selection): `board-editor.tsx` now syncs `selection` from React Flow's `onSelectionChange` (forwarded through `BoardCanvas`), so selecting a node or edge from the keyboard (Tab, then Enter/Space) opens the panel, not just mouse clicks. Mapping to the single-element panel: exactly one selected node or edge opens or updates it; none or several close it. The callback is memoized and skips the state update when the element is unchanged. The click handlers stay, but ignore Shift/Ctrl/Meta clicks (multi-select gestures) so they can't override the callback with a single element during a multi-select.
+  - Verified: `tsc --noEmit`, `npm run lint` and `npm run build` pass with zero errors.
+  - **Not verified:** no browser run (needs a live Clerk session). Also check keyboard selection opens the panel, and a Ctrl/Shift multi-select closes it. Still to check by hand: dragging handle to handle creates a smooth-step REST edge with an arrowhead; clicking the path and the badge both open the panel; protocol, Sync/Async, route and load edits update the edge live; node rename and sub-label update the node live and a blanked label keeps the last valid one; pane click, `Escape` and `X` close the panel; edits flip status to `dirty` and Save then reload rehydrates edges and nodes; deleting the selected element closes the panel; `z-40` ordering against the toolbar, sidebar and dialogs; narrow-viewport fit; a hand-corrupted edge `data` renders as REST/sync; clean console.
 
 - **Unit 08: smart nodes + swimlane layout + add-node toolbar (`context/feature-specs/08-smart-nodes.md`).**
   - `app/globals.css`: added the six `--node-*` colors and their 15%-alpha `--node-*-bg` variants under both `:root` and `.dark`, and mapped all twelve into `@theme inline` as `--color-node-*` so `bg-node-database-bg`, `text-node-lb`, `border-node-cache` etc. work as utilities. This closes the open `--node-*` question (`--radius` already existed).
@@ -155,11 +173,12 @@ change.
 
 ## Next Up
 
-- Write the Unit 09 spec (annotated edges + edge property panel), then implement it.
+- Browser-verify Unit 09 (checklist in the Unit 09 entry above and in `09-annotated-edges.md`).
+- Unit 10: bounding boxes (`00-build-plan.md`); needs its own spec first.
 
 ## Open Questions
 
-- Default node label is the category name and there is no way to rename a node yet. Unit 09's property panel scope (or a later unit) needs to decide where node renaming lives.
+- ~~Default node label is the category name and there is no way to rename a node yet.~~ **Resolved:** node renaming lives in Unit 09's shared property panel (`09-annotated-edges.md`). No later unit (10–16) naturally owns node editing, so the Unit 09 panel was widened from edge-only to a shared selection panel: clicking a node edits its `label`/`subLabel` in the same right-anchored panel used for edges.
 - `02-editor.md` didn't specify who owns the open/closed state shared by `editor-navbar.tsx` and `project-sidebar.tsx`, or a fixed width for the project sidebar. Made both components controlled (parent passes `isSidebarOpen`/`isOpen` + toggle callbacks) and picked `w-80` (320px, standard Tailwind scale) for the sidebar width, distinct from the 360px AI chat sidebar `ui-context.md` defines elsewhere. Neither is wired into a page yet — no editor page/layout exists to mount them.
 - `02-editor.md` didn't assign a z-index layer to the project sidebar specifically; reused `z-40` (the "AI chat sidebar / property panel" layer from `ui-context.md`'s hierarchy) since it's the closest matching floating-panel-over-canvas layer.
 

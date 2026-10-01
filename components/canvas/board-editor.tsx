@@ -11,6 +11,7 @@ import {
   type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
+  type OnSelectionChangeFunc,
 } from "@xyflow/react"
 import { AlertCircle, Check, Circle, Loader2, Save } from "lucide-react"
 import { cn } from "cn"
@@ -18,12 +19,20 @@ import { cn } from "cn"
 import { saveCanvas } from "@/app/editor/[projectId]/actions"
 import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
 import { BoardCanvas } from "@/components/canvas/board-canvas"
+import {
+  PropertyPanel,
+  type PropertyPanelSelection,
+} from "@/components/canvas/property-panel"
 import { EditorShell } from "@/components/editor/editor-shell"
 import { Button } from "@/components/ui/button"
 import {
+  ANNOTATED_EDGE_TYPE,
   CATEGORY_LABEL,
+  DEFAULT_EDGE_DATA,
+  createEdgeId,
   createNodeId,
   nextLanePosition,
+  type AnnotatedEdgeData,
   type BoardEdge,
   type BoardNode,
   type CanvasSnapshot,
@@ -33,6 +42,11 @@ import {
 import type { ProjectListItem } from "@/lib/projects"
 
 type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
+
+interface SelectedElement {
+  kind: "edge" | "node"
+  id: string
+}
 
 interface BoardEditorProps {
   projectId: string
@@ -130,6 +144,9 @@ function BoardEditorInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState<BoardEdge>(
     initialSnapshot.edges
   )
+  const [selection, setSelection] = React.useState<SelectedElement | null>(
+    null
+  )
   const [status, setStatus] = React.useState<SaveStatusValue>("clean")
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [isPending, startTransition] = React.useTransition()
@@ -205,8 +222,105 @@ function BoardEditorInner({
   }
 
   const onConnect: OnConnect = (connection) => {
-    setEdges((current) => addEdge(connection, current))
+    setEdges((current) =>
+      addEdge(
+        {
+          ...connection,
+          id: createEdgeId(),
+          type: ANNOTATED_EDGE_TYPE,
+          data: { ...DEFAULT_EDGE_DATA },
+        },
+        current
+      )
+    )
     markDirty()
+  }
+
+  // Closing the panel also drops React Flow's own highlight so the two agree.
+  const clearSelection = React.useCallback(() => {
+    setSelection(null)
+    setNodes((current) =>
+      current.some((n) => n.selected)
+        ? current.map((n) => (n.selected ? { ...n, selected: false } : n))
+        : current
+    )
+    setEdges((current) =>
+      current.some((e) => e.selected)
+        ? current.map((e) => (e.selected ? { ...e, selected: false } : e))
+        : current
+    )
+  }, [setNodes, setEdges])
+
+  const hasSelection = selection !== null
+  React.useEffect(() => {
+    if (!hasSelection) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) clearSelection()
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [hasSelection, clearSelection])
+
+  // React Flow's selection is the source of truth, so keyboard selection
+  // (Tab + Enter/Space) opens the panel too. The panel edits one element:
+  // exactly one selected node or edge opens it; none or several close it.
+  const handleSelectionChange: OnSelectionChangeFunc<BoardNode, BoardEdge> =
+    React.useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
+      let next: SelectedElement | null = null
+      if (selectedNodes.length + selectedEdges.length === 1) {
+        next =
+          selectedNodes.length === 1
+            ? { kind: "node", id: selectedNodes[0].id }
+            : { kind: "edge", id: selectedEdges[0].id }
+      }
+      setSelection((prev) =>
+        prev?.kind === next?.kind && prev?.id === next?.id ? prev : next
+      )
+    }, [])
+
+  // Plain clicks select directly. A modifier click is a multi-select gesture,
+  // so it is left to handleSelectionChange.
+  const isMultiSelectClick = (event: React.MouseEvent) =>
+    event.shiftKey || event.metaKey || event.ctrlKey
+  const handleEdgeClick = (event: React.MouseEvent, edge: BoardEdge) => {
+    if (isMultiSelectClick(event)) return
+    setSelection({ kind: "edge", id: edge.id })
+  }
+  const handleNodeClick = (event: React.MouseEvent, node: BoardNode) => {
+    if (isMultiSelectClick(event)) return
+    setSelection({ kind: "node", id: node.id })
+  }
+  const handlePaneClick = () => setSelection(null)
+
+  const updateEdgeData = (patch: Partial<AnnotatedEdgeData>) => {
+    if (selection?.kind !== "edge") return
+    setEdges((current) =>
+      current.map((e) =>
+        e.id === selection.id ? { ...e, data: { ...e.data, ...patch } } : e
+      )
+    )
+    markDirty()
+  }
+
+  const updateNodeData = (patch: Partial<SmartNodeData>) => {
+    if (selection?.kind !== "node") return
+    setNodes((current) =>
+      current.map((n) =>
+        n.id === selection.id ? { ...n, data: { ...n.data, ...patch } } : n
+      )
+    )
+    markDirty()
+  }
+
+  // Resolved from live state so the panel tracks edits, and unmounts on its
+  // own if the selected element is deleted.
+  let panelSelection: PropertyPanelSelection | null = null
+  if (selection?.kind === "edge") {
+    const edge = edges.find((e) => e.id === selection.id)
+    if (edge) panelSelection = { kind: "edge", edge }
+  } else if (selection?.kind === "node") {
+    const node = nodes.find((n) => n.id === selection.id)
+    if (node) panelSelection = { kind: "node", node }
   }
 
   const handleAddNode = (category: NodeCategory) => {
@@ -268,8 +382,20 @@ function BoardEditorInner({
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            onEdgeClick={handleEdgeClick}
+            onNodeClick={handleNodeClick}
+            onPaneClick={handlePaneClick}
+            onSelectionChange={handleSelectionChange}
           />
           <AddNodeToolbar onAdd={handleAddNode} />
+          {panelSelection && (
+            <PropertyPanel
+              selection={panelSelection}
+              onEdgeDataChange={updateEdgeData}
+              onNodeDataChange={updateNodeData}
+              onClose={clearSelection}
+            />
+          )}
         </div>
       )}
     </EditorShell>

@@ -86,7 +86,7 @@ shadcn/ui on top of Tailwind CSS v4. Components live in `components/ui/` and are
 
 ## Layout Patterns
 
-- **Editor view (board open):** full-viewport layout — top bar (board title, share button, save status) with bottom border, center React Flow canvas (`--bg-base`), right-anchored AI chat sidebar (`--bg-surface`) with left border separator. Edge property panel slides in from the right over the canvas when an edge is selected.
+- **Editor view (board open):** full-viewport layout — top bar (board title, share button, save status) with bottom border, center React Flow canvas (`--bg-base`), right-anchored AI chat sidebar (`--bg-surface`) with left border separator. A shared property panel slides in from the right over the canvas when an edge or node is selected (edges: protocol, sync/async, API route, load; nodes: label, sub-label).
 - **Sidebars:** fixed width (chat sidebar: 360px), full-height, single-border separator against canvas — no shadows.
 - **Modals:** centered overlay on `--bg-elevated` with backdrop blur (`backdrop-blur-sm`) over a semi-transparent scrim; `rounded-lg`.
 - **Top bar:** 48px height, `--bg-surface`, bottom border only — no shadow.
