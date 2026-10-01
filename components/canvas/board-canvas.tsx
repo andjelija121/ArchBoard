@@ -8,6 +8,7 @@ import {
   type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
+  type OnSelectionChangeFunc,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import "./react-flow-overrides.css"
@@ -31,6 +32,7 @@ interface BoardCanvasProps {
   onEdgeClick: (event: React.MouseEvent, edge: BoardEdge) => void
   onNodeClick: (event: React.MouseEvent, node: BoardNode) => void
   onPaneClick: () => void
+  onSelectionChange: OnSelectionChangeFunc<BoardNode, BoardEdge>
 }
 
 // Edges drawn by dragging between handles render as annotated edges.
@@ -49,6 +51,7 @@ export function BoardCanvas({
   onEdgeClick,
   onNodeClick,
   onPaneClick,
+  onSelectionChange,
 }: BoardCanvasProps) {
   return (
     <div className="h-full w-full">
@@ -65,6 +68,7 @@ export function BoardCanvas({
           onEdgeClick={onEdgeClick}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
+          onSelectionChange={onSelectionChange}
           colorMode="dark"
           fitView
           proOptions={{ hideAttribution: false }}

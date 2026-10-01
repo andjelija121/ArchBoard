@@ -11,6 +11,7 @@ import {
   type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
+  type OnSelectionChangeFunc,
 } from "@xyflow/react"
 import { AlertCircle, Check, Circle, Loader2, Save } from "lucide-react"
 import { cn } from "cn"
@@ -41,6 +42,11 @@ import {
 import type { ProjectListItem } from "@/lib/projects"
 
 type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
+
+interface SelectedElement {
+  kind: "edge" | "node"
+  id: string
+}
 
 interface BoardEditorProps {
   projectId: string
@@ -138,10 +144,9 @@ function BoardEditorInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState<BoardEdge>(
     initialSnapshot.edges
   )
-  const [selection, setSelection] = React.useState<{
-    kind: "edge" | "node"
-    id: string
-  } | null>(null)
+  const [selection, setSelection] = React.useState<SelectedElement | null>(
+    null
+  )
   const [status, setStatus] = React.useState<SaveStatusValue>("clean")
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [isPending, startTransition] = React.useTransition()
@@ -256,10 +261,35 @@ function BoardEditorInner({
     return () => document.removeEventListener("keydown", onKeyDown)
   }, [hasSelection, clearSelection])
 
-  const handleEdgeClick = (_: React.MouseEvent, edge: BoardEdge) =>
+  // React Flow's selection is the source of truth, so keyboard selection
+  // (Tab + Enter/Space) opens the panel too. The panel edits one element:
+  // exactly one selected node or edge opens it; none or several close it.
+  const handleSelectionChange: OnSelectionChangeFunc<BoardNode, BoardEdge> =
+    React.useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
+      let next: SelectedElement | null = null
+      if (selectedNodes.length + selectedEdges.length === 1) {
+        next =
+          selectedNodes.length === 1
+            ? { kind: "node", id: selectedNodes[0].id }
+            : { kind: "edge", id: selectedEdges[0].id }
+      }
+      setSelection((prev) =>
+        prev?.kind === next?.kind && prev?.id === next?.id ? prev : next
+      )
+    }, [])
+
+  // Plain clicks select directly. A modifier click is a multi-select gesture,
+  // so it is left to handleSelectionChange.
+  const isMultiSelectClick = (event: React.MouseEvent) =>
+    event.shiftKey || event.metaKey || event.ctrlKey
+  const handleEdgeClick = (event: React.MouseEvent, edge: BoardEdge) => {
+    if (isMultiSelectClick(event)) return
     setSelection({ kind: "edge", id: edge.id })
-  const handleNodeClick = (_: React.MouseEvent, node: BoardNode) =>
+  }
+  const handleNodeClick = (event: React.MouseEvent, node: BoardNode) => {
+    if (isMultiSelectClick(event)) return
     setSelection({ kind: "node", id: node.id })
+  }
   const handlePaneClick = () => setSelection(null)
 
   const updateEdgeData = (patch: Partial<AnnotatedEdgeData>) => {
@@ -355,6 +385,7 @@ function BoardEditorInner({
             onEdgeClick={handleEdgeClick}
             onNodeClick={handleNodeClick}
             onPaneClick={handlePaneClick}
+            onSelectionChange={handleSelectionChange}
           />
           <AddNodeToolbar onAdd={handleAddNode} />
           {panelSelection && (
