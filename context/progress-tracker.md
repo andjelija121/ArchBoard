@@ -5,13 +5,29 @@ change.
 
 ## Current Phase
 
-- Unit 11 (AI chat sidebar UI) implemented per `context/feature-specs/11-ai-sidebar.md`; code complete, `tsc`/`lint`/`build` pass, browser verification pending. Units 09 and 10 also awaiting browser verification.
+- Unit 12 (AI generation backend) implemented with Trigger.dev + Groq. AI now generates both nodes AND groups (bounding boxes). Code complete, `tsc`/`build` pass. End-to-end browser testing needs a live Clerk session + Trigger.dev dev server + `GROQ_API_KEY`. Units 09–11 also awaiting browser verification.
 
 ## Current Goal
 
-- Browser-verify Units 09–11 (needs a live Clerk session), then start Unit 12 (Trigger.dev + Gemini backend + node spawning).
+- Browser-verify Units 09–12 (needs a live Clerk session + `npx trigger.dev@latest dev` + `GROQ_API_KEY`).
 
 ## Completed
+
+- **Unit 12: AI generation backend (`context/feature-specs/12-ai-backend.md`).** Pivoted from Gemini to **Groq** due to Gemini model instability. Architecture: Trigger.dev background job + Groq + `useRealtimeRun` SSE subscription. AI now generates **both nodes AND groups** (bounding boxes).
+  - `lib/canvas.ts`: added `MAX_GENERATED_NODES` (12), `MAX_GENERATED_GROUPS` (6), `generatedNodeSchema`, `generatedGroupSchema` (`{ label, color?, nodeIndices }`), `generatedResultSchema` (`{ nodes, groups? }`), and their types. Group schema references `GROUP_COLORS` from Unit 10.
+  - `trigger/generate-infra.ts`: the **only** LLM call site (invariant #2). Uses `groq-sdk` with `response_format: { type: "json_object" }` against `openai/gpt-oss-120b` (configurable via `GROQ_MODEL`). System prompt teaches the model about nodes (with category mapping) and groups (with `nodeIndices`). Response normalized (handles bare arrays, `{ nodes }`, or arbitrary wrappers) and Zod-validated against `generatedResultSchema`.
+  - `app/editor/[projectId]/ai-actions.ts`: `generateNodes` Server Action. Clerk auth → Zod validation → owner-scoped Prisma check → `tasks.trigger("generate-infra")` → returns `{ ok: true, runId, accessToken }`. Never awaits the LLM (invariant #2 satisfied).
+  - `components/ai/use-ai-sidebar.ts`: `useRealtimeRun` subscribes to run status. On `COMPLETED`: Zod-validates output with `generatedResultSchema`, calls `onSpawn(result)` with full `GeneratedResult` (nodes + groups), patches assistant message to `success` with summary listing nodes and groups. `UseAiSidebar` return type unchanged. `onSpawn` now accepts `GeneratedResult` instead of `GeneratedNode[]`.
+  - `components/canvas/board-editor.tsx`: `handleSpawnResult` replaces `handleSpawnNodes`. Creates smart nodes via `nextLanePosition`, then for each group resolves `nodeIndices` → member IDs → `computeGroupBounds` → group node (`type: "group"`, `zIndex: -1`, `{ label, color, childIds }`). Groups prepended, nodes appended. `markDirty()`.
+  - `context/architecture.md`: AI Engine = Groq (`groq-sdk`, `openai/gpt-oss-120b`). Background Tasks = Trigger.dev. Synchronous LLM Ban invariant restored.
+  - Deps: `groq-sdk`, `@trigger.dev/sdk`, `@trigger.dev/react-hooks`, `@trigger.dev/build`.
+  - Env vars: `TRIGGER_SECRET_KEY`, `GROQ_API_KEY`. Optional: `GROQ_MODEL`.
+  - **Run prerequisite:** Trigger.dev dev server (`npx trigger.dev@latest dev`) must be running.
+  - Verified: `tsc --noEmit` and `npm run build` pass with zero errors.
+  - **Not verified:** end-to-end AI generation (needs live Clerk session + Trigger.dev dev server + `GROQ_API_KEY`). Still to check: node spawning in swimlanes, group spawning with correct bounds/colors, pending → success with node+group summary, error states and Retry, append-only, non-owner rejection, save/reload, responsive.
+
+- **Unit 12 spec written (`context/feature-specs/12-ai-backend.md`).** Originally specced with Gemini; pivoted to Groq after Gemini model instability. Extended to generate groups (bounding boxes) alongside nodes. See the Unit 12 implementation entry above for details.
+
 
 - **Unit 11: AI chat sidebar UI (`context/feature-specs/11-ai-sidebar.md`).**
   - `components/ai/ai-types.ts` (new): `ChatRole`, `GenerationStatus`, `ChatMessage` interface, `createMessageId()` (`m_` prefix).

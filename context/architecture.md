@@ -9,8 +9,8 @@
 | Auth | Clerk | User authentication, OAuth (GitHub/Google), and session management for board owners. |
 | Database | PostgreSQL + Prisma | Persistent relational storage for user data, board metadata, and canvas JSON state. |
 | Multiplayer | Liveblocks | Real-time WebSocket synchronization, cursor tracking, and volatile session state management. |
-| Background Tasks | Trigger.dev | Orchestrating long-running AI generation calls outside of the main Next.js thread. |
-| AI Engine | Google Gemini (via Google AI Studio) (`gemini-1.5-flash`) | Generating structured JSON for infrastructure nodes based on user text prompts. |
+| Background Tasks | Trigger.dev | Orchestrating AI generation calls outside of the main Next.js thread to avoid serverless timeouts. |
+| AI Engine | Groq (`groq-sdk`, default `openai/gpt-oss-120b`, configurable via `GROQ_MODEL` env var) | Generating structured JSON for infrastructure nodes and groups based on user text prompts. |
 
 ## System Boundaries
 
@@ -18,7 +18,7 @@
 * `components/canvas/` — Owns the React Flow implementation, including custom nodes (Compute, DB, etc.), custom edges, and the edge property side-panel.
 * `components/ai/` — Owns the persistent chat sidebar UI and localized prompt state management.
 * `lib/liveblocks/` — Owns the multiplayer room configuration, WebSocket connection hooks, and sync logic.
-* `trigger/` (or `jobs/`) — Owns the Trigger.dev background task definitions and direct LLM API interactions.
+* `trigger/` — Owns the Trigger.dev background task definitions and LLM API interactions.
 * `prisma/` — Owns the database schema, migrations, and ORM client generation.
 
 ## Storage Model
@@ -34,9 +34,10 @@
 
 ## AI and Background Task Model
 
-* User prompts from the chat sidebar are sent to a Next.js Server Action, which immediately hands the payload off to a Trigger.dev background job and returns a job ID to the client.
-* Trigger.dev orchestrates the call to the LLM (Google Gemini) using strict Structured Outputs to guarantee a JSON payload that matches the React Flow node schema.
-* The AI assigns a `category` (e.g., "Gateway", "Database") to each generated node. The frontend UI uses this category to calculate the X-coordinate for "swimlane" spawning, eliminating the need for complex auto-layout algorithms.
+* User prompts from the chat sidebar are sent to a Next.js Server Action, which hands the payload to a Trigger.dev background job and returns a run ID + scoped public token to the client.
+* Trigger.dev orchestrates the call to Groq using JSON-mode output. The response is Zod-validated against `generatedResultSchema` to guarantee a payload matching the node and group schemas. A malformed response marks the run as FAILED and surfaces as an error on the client.
+* The AI assigns a `category` (e.g., "Gateway", "Database") to each generated node. The frontend UI uses this category to calculate the X-coordinate for "swimlane" spawning. The AI can also return optional groups that wrap related nodes in bounding boxes (Unit 10).
+* The client subscribes to the run via `useRealtimeRun` (SSE) and spawns nodes/groups on completion.
 
 ## Invariants
 

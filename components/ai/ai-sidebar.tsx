@@ -107,7 +107,7 @@ export function AiSidebar({
         </div>
 
         {/* Chat history */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="flex flex-col gap-3 p-3">
             {messages.length === 0 ? (
               <AiEmptyState onPickExample={handlePickExample} />
@@ -139,7 +139,7 @@ export function AiSidebar({
             />
             <Button
               size="icon-sm"
-              onClick={onSubmit}
+              onClick={() => onSubmit()}
               disabled={!canSend}
               aria-label="Send prompt"
               className="absolute bottom-2 right-2"

@@ -76,6 +76,12 @@ export const smartNodeDataSchema = z.object({
 
 export type SmartNodeData = z.infer<typeof smartNodeDataSchema>
 
+export const MAX_GENERATED_NODES = 12
+export const MAX_GENERATED_GROUPS = 6
+
+export const generatedNodeSchema = smartNodeDataSchema
+export type GeneratedNode = z.infer<typeof generatedNodeSchema>
+
 export interface SpawnPlacement {
   x: number
   y: number
@@ -171,6 +177,33 @@ export const groupNodeDataSchema = z.object({
 })
 
 export type GroupNodeData = z.infer<typeof groupNodeDataSchema>
+
+export const generatedGroupSchema = z.object({
+  label: z.string().min(1).max(80),
+  color: z.enum(GROUP_COLORS).optional(),
+  nodeIndices: z.array(z.number().int().min(0)).min(1),
+})
+export type GeneratedGroup = z.infer<typeof generatedGroupSchema>
+
+export const generatedResultSchema = z.object({
+  nodes: z
+    .array(generatedNodeSchema)
+    .min(1, "The model returned no nodes.")
+    .max(MAX_GENERATED_NODES, "The model returned too many nodes."),
+  groups: z
+    .array(generatedGroupSchema)
+    .max(MAX_GENERATED_GROUPS, "The model returned too many groups.")
+    .optional()
+    .default([]),
+})
+export type GeneratedResult = z.infer<typeof generatedResultSchema>
+
+export const generatedNodesSchema = z
+  .array(generatedNodeSchema)
+  .min(1, "The model returned no nodes.")
+  .max(MAX_GENERATED_NODES, "The model returned too many nodes.")
+
+export type GeneratedNodes = z.infer<typeof generatedNodesSchema>
 
 export interface GroupBounds {
   x: number
