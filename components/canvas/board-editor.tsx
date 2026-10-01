@@ -10,6 +10,7 @@ import {
   useStoreApi,
   type OnConnect,
   type OnEdgesChange,
+  type OnNodeDrag,
   type OnNodesChange,
   type OnSelectionChangeFunc,
 } from "@xyflow/react"
@@ -19,6 +20,7 @@ import { cn } from "cn"
 import { saveCanvas } from "@/app/editor/[projectId]/actions"
 import { AddNodeToolbar } from "@/components/canvas/add-node-toolbar"
 import { BoardCanvas } from "@/components/canvas/board-canvas"
+import { HelpButton } from "@/components/canvas/help-dialog"
 import {
   PropertyPanel,
   type PropertyPanelSelection,
@@ -29,13 +31,21 @@ import {
   ANNOTATED_EDGE_TYPE,
   CATEGORY_LABEL,
   DEFAULT_EDGE_DATA,
+  DEFAULT_GROUP_COLOR,
+  DEFAULT_GROUP_LABEL,
+  GROUP_NODE_TYPE,
+  GROUP_Z_INDEX,
+  computeGroupBounds,
   createEdgeId,
+  createGroupId,
   createNodeId,
+  groupNodeDataSchema,
   nextLanePosition,
   type AnnotatedEdgeData,
   type BoardEdge,
   type BoardNode,
   type CanvasSnapshot,
+  type GroupNodeData,
   type NodeCategory,
   type SmartNodeData,
 } from "@/lib/canvas"
@@ -44,9 +54,17 @@ import type { ProjectListItem } from "@/lib/projects"
 type SaveStatusValue = "clean" | "dirty" | "saving" | "saved" | "error"
 
 interface SelectedElement {
-  kind: "edge" | "node"
+  kind: "edge" | "node" | "group"
   id: string
 }
+
+const selectedNodeElement = (node: BoardNode): SelectedElement => ({
+  kind: node.type === GROUP_NODE_TYPE ? "group" : "node",
+  id: node.id,
+})
+
+const sameIds = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((id, i) => id === b[i])
 
 interface BoardEditorProps {
   projectId: string
@@ -147,6 +165,8 @@ function BoardEditorInner({
   const [selection, setSelection] = React.useState<SelectedElement | null>(
     null
   )
+  // Selected smart nodes (never boxes): the set a new box would wrap.
+  const [groupableIds, setGroupableIds] = React.useState<string[]>([])
   const [status, setStatus] = React.useState<SaveStatusValue>("clean")
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [isPending, startTransition] = React.useTransition()
@@ -194,10 +214,17 @@ function BoardEditorInner({
     )
   }
 
-  // Selection and measured-size changes aren't edits.
+  // Selection and measured-size changes aren't edits; a user-driven resize
+  // arrives as a `dimensions` change flagged `resizing`, and is.
   const handleNodesChange: OnNodesChange<BoardNode> = (changes) => {
     onNodesChange(changes)
-    if (changes.some((c) => c.type !== "select" && c.type !== "dimensions")) {
+    if (
+      changes.some(
+        (c) =>
+          (c.type !== "select" && c.type !== "dimensions") ||
+          (c.type === "dimensions" && c.resizing)
+      )
+    ) {
       markDirty()
     }
 
@@ -263,19 +290,24 @@ function BoardEditorInner({
 
   // React Flow's selection is the source of truth, so keyboard selection
   // (Tab + Enter/Space) opens the panel too. The panel edits one element:
-  // exactly one selected node or edge opens it; none or several close it.
+  // exactly one selected node, box or edge opens it; none or several close it.
   const handleSelectionChange: OnSelectionChangeFunc<BoardNode, BoardEdge> =
     React.useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
       let next: SelectedElement | null = null
       if (selectedNodes.length + selectedEdges.length === 1) {
         next =
           selectedNodes.length === 1
-            ? { kind: "node", id: selectedNodes[0].id }
+            ? selectedNodeElement(selectedNodes[0])
             : { kind: "edge", id: selectedEdges[0].id }
       }
       setSelection((prev) =>
         prev?.kind === next?.kind && prev?.id === next?.id ? prev : next
       )
+
+      const groupable = selectedNodes
+        .filter((n) => n.type !== GROUP_NODE_TYPE)
+        .map((n) => n.id)
+      setGroupableIds((prev) => (sameIds(prev, groupable) ? prev : groupable))
     }, [])
 
   // Plain clicks select directly. A modifier click is a multi-select gesture,
@@ -288,7 +320,7 @@ function BoardEditorInner({
   }
   const handleNodeClick = (event: React.MouseEvent, node: BoardNode) => {
     if (isMultiSelectClick(event)) return
-    setSelection({ kind: "node", id: node.id })
+    setSelection(selectedNodeElement(node))
   }
   const handlePaneClick = () => setSelection(null)
 
@@ -312,6 +344,29 @@ function BoardEditorInner({
     markDirty()
   }
 
+  const updateGroupData = (patch: Partial<GroupNodeData>) => {
+    if (selection?.kind !== "group") return
+    setNodes((current) =>
+      current.map((n) =>
+        n.id === selection.id ? { ...n, data: { ...n.data, ...patch } } : n
+      )
+    )
+    markDirty()
+  }
+
+  // Members are independent nodes, so removing the box never touches them.
+  // Edges attached to the box itself go with it, as React Flow's own delete does.
+  const ungroup = () => {
+    if (selection?.kind !== "group") return
+    const id = selection.id
+    setNodes((current) => current.filter((n) => n.id !== id))
+    setEdges((current) =>
+      current.filter((e) => e.source !== id && e.target !== id)
+    )
+    markDirty()
+    clearSelection()
+  }
+
   // Resolved from live state so the panel tracks edits, and unmounts on its
   // own if the selected element is deleted.
   let panelSelection: PropertyPanelSelection | null = null
@@ -321,6 +376,85 @@ function BoardEditorInner({
   } else if (selection?.kind === "node") {
     const node = nodes.find((n) => n.id === selection.id)
     if (node) panelSelection = { kind: "node", node }
+  } else if (selection?.kind === "group") {
+    const node = nodes.find((n) => n.id === selection.id)
+    if (node) panelSelection = { kind: "group", node }
+  }
+
+  const canGroup = groupableIds.length >= 2
+
+  const handleGroup = () => {
+    const members = nodes.filter((n) => groupableIds.includes(n.id))
+    if (members.length < 2) return
+    const bounds = computeGroupBounds(members)
+    const id = createGroupId()
+    const groupData: GroupNodeData = {
+      label: DEFAULT_GROUP_LABEL,
+      color: DEFAULT_GROUP_COLOR,
+      childIds: members.map((m) => m.id),
+    }
+    const groupNode: BoardNode = {
+      id,
+      type: GROUP_NODE_TYPE,
+      position: { x: bounds.x, y: bounds.y },
+      width: bounds.width,
+      height: bounds.height,
+      zIndex: GROUP_Z_INDEX,
+      selected: true,
+      data: groupData,
+    }
+    // Prepended so the box is first in DOM order, and the members it wraps are
+    // deselected so React Flow's selection agrees with the panel.
+    setNodes((current) => [
+      groupNode,
+      ...current.map((n) => (n.selected ? { ...n, selected: false } : n)),
+    ])
+    // A marquee selection leaves React Flow's multi-select overlay switched on.
+    // It only clears it through its own deselect path, which setNodes bypasses,
+    // so without this the overlay would sit on top of the box and block clicks
+    // and connections on every member.
+    store.setState({ nodesSelectionActive: false })
+    markDirty()
+    setSelection({ kind: "group", id })
+  }
+
+  // Dragging a box moves its members by the same delta. The ref holds the
+  // box's previous position so each tick applies only the increment.
+  const groupDrag = React.useRef<{ id: string; x: number; y: number } | null>(
+    null
+  )
+
+  const handleNodeDragStart: OnNodeDrag<BoardNode> = (_event, node) => {
+    if (node.type !== GROUP_NODE_TYPE) return
+    groupDrag.current = { id: node.id, x: node.position.x, y: node.position.y }
+  }
+
+  const handleNodeDrag: OnNodeDrag<BoardNode> = (_event, node) => {
+    const last = groupDrag.current
+    if (node.type !== GROUP_NODE_TYPE || last?.id !== node.id) return
+    const dx = node.position.x - last.x
+    const dy = node.position.y - last.y
+    if (dx === 0 && dy === 0) return
+    groupDrag.current = { id: node.id, x: node.position.x, y: node.position.y }
+
+    const parsed = groupNodeDataSchema.safeParse(node.data)
+    if (!parsed.success) return
+    const childIds = new Set(parsed.data.childIds)
+    // Selected members are already moved by React Flow's own multi-drag.
+    setNodes((current) =>
+      current.map((n) =>
+        childIds.has(n.id) && !n.selected
+          ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } }
+          : n
+      )
+    )
+  }
+
+  const handleNodeDragStop: OnNodeDrag<BoardNode> = (_event, node) => {
+    if (groupDrag.current?.id !== node.id) return
+    groupDrag.current = null
+    // The member moves above don't pass through handleNodesChange.
+    markDirty()
   }
 
   const handleAddNode = (category: NodeCategory) => {
@@ -362,6 +496,7 @@ function BoardEditorInner({
       navbarCenter={<BoardTitle name={projectName} />}
       navbarActions={
         <>
+          <HelpButton />
           <SaveStatus status={status} error={saveError} />
           <Button
             size="sm"
@@ -386,13 +521,22 @@ function BoardEditorInner({
             onNodeClick={handleNodeClick}
             onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
+            onNodeDragStart={handleNodeDragStart}
+            onNodeDrag={handleNodeDrag}
+            onNodeDragStop={handleNodeDragStop}
           />
-          <AddNodeToolbar onAdd={handleAddNode} />
+          <AddNodeToolbar
+            onAdd={handleAddNode}
+            onGroup={handleGroup}
+            canGroup={canGroup}
+          />
           {panelSelection && (
             <PropertyPanel
               selection={panelSelection}
               onEdgeDataChange={updateEdgeData}
               onNodeDataChange={updateNodeData}
+              onGroupDataChange={updateGroupData}
+              onUngroup={ungroup}
               onClose={clearSelection}
             />
           )}

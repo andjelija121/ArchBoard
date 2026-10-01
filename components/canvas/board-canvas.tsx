@@ -7,6 +7,7 @@ import {
   ReactFlow,
   type OnConnect,
   type OnEdgesChange,
+  type OnNodeDrag,
   type OnNodesChange,
   type OnSelectionChangeFunc,
 } from "@xyflow/react"
@@ -33,6 +34,9 @@ interface BoardCanvasProps {
   onNodeClick: (event: React.MouseEvent, node: BoardNode) => void
   onPaneClick: () => void
   onSelectionChange: OnSelectionChangeFunc<BoardNode, BoardEdge>
+  onNodeDragStart: OnNodeDrag<BoardNode>
+  onNodeDrag: OnNodeDrag<BoardNode>
+  onNodeDragStop: OnNodeDrag<BoardNode>
 }
 
 // Edges drawn by dragging between handles render as annotated edges.
@@ -52,6 +56,9 @@ export function BoardCanvas({
   onNodeClick,
   onPaneClick,
   onSelectionChange,
+  onNodeDragStart,
+  onNodeDrag,
+  onNodeDragStop,
 }: BoardCanvasProps) {
   return (
     <div className="h-full w-full">
@@ -69,6 +76,12 @@ export function BoardCanvas({
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           onSelectionChange={onSelectionChange}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
+          // Selecting a node would otherwise lift it 1000 z-levels, so a
+          // selected bounding box would cover (and swallow clicks for) its members.
+          elevateNodesOnSelect={false}
           colorMode="dark"
           fitView
           proOptions={{ hideAttribution: false }}

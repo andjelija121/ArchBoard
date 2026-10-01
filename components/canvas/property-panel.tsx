@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { X } from "lucide-react"
+import { Boxes, X } from "lucide-react"
 import { cn } from "cn"
 
+import { GROUP_STYLE } from "@/components/canvas/groups/group-style"
 import {
   CATEGORY_ICON,
   CATEGORY_STYLE,
@@ -15,23 +16,29 @@ import {
   CATEGORY_LABEL,
   DEFAULT_EDGE_DATA,
   EDGE_PROTOCOLS,
+  GROUP_COLORS,
   PROTOCOL_LABEL,
   annotatedEdgeDataSchema,
+  groupNodeDataSchema,
   smartNodeDataSchema,
   type AnnotatedEdgeData,
   type BoardEdge,
   type BoardNode,
+  type GroupNodeData,
   type SmartNodeData,
 } from "@/lib/canvas"
 
 export type PropertyPanelSelection =
   | { kind: "edge"; edge: BoardEdge }
   | { kind: "node"; node: BoardNode }
+  | { kind: "group"; node: BoardNode }
 
 interface PropertyPanelProps {
   selection: PropertyPanelSelection
   onEdgeDataChange: (patch: Partial<AnnotatedEdgeData>) => void
   onNodeDataChange: (patch: Partial<SmartNodeData>) => void
+  onGroupDataChange: (patch: Partial<GroupNodeData>) => void
+  onUngroup: () => void
   onClose: () => void
 }
 
@@ -160,6 +167,40 @@ function EdgeFields({
   )
 }
 
+/**
+ * Label input for elements whose stored label must stay non-empty. The field
+ * may be blank while typing without writing that blank value; blur restores
+ * the last stored label.
+ */
+function LabelField({
+  label,
+  onChange,
+}: {
+  label: string
+  onChange: (label: string) => void
+}) {
+  const labelId = React.useId()
+  const [draft, setDraft] = React.useState(label)
+
+  return (
+    <Field label="Label" htmlFor={labelId}>
+      <Input
+        id={labelId}
+        maxLength={LABEL_MAX}
+        value={draft}
+        onChange={(event) => {
+          const value = event.target.value
+          setDraft(value)
+          if (value.trim() !== "") onChange(value)
+        }}
+        onBlur={() => {
+          if (draft.trim() === "") setDraft(label)
+        }}
+      />
+    </Field>
+  )
+}
+
 function NodeFields({
   data,
   onChange,
@@ -167,29 +208,11 @@ function NodeFields({
   data: SmartNodeData
   onChange: (patch: Partial<SmartNodeData>) => void
 }) {
-  const labelId = React.useId()
   const subLabelId = React.useId()
-  // The stored label must stay non-empty, so the field is allowed to be blank
-  // while typing without writing that blank value to the node.
-  const [labelDraft, setLabelDraft] = React.useState(data.label)
 
   return (
     <>
-      <Field label="Label" htmlFor={labelId}>
-        <Input
-          id={labelId}
-          maxLength={LABEL_MAX}
-          value={labelDraft}
-          onChange={(event) => {
-            const value = event.target.value
-            setLabelDraft(value)
-            if (value.trim() !== "") onChange({ label: value })
-          }}
-          onBlur={() => {
-            if (labelDraft.trim() === "") setLabelDraft(data.label)
-          }}
-        />
-      </Field>
+      <LabelField label={data.label} onChange={(label) => onChange({ label })} />
       <Field label="Sub-label" htmlFor={subLabelId}>
         <Input
           id={subLabelId}
@@ -206,9 +229,92 @@ function NodeFields({
   )
 }
 
+function GroupFields({
+  data,
+  onChange,
+  onUngroup,
+}: {
+  data: GroupNodeData
+  onChange: (patch: Partial<GroupNodeData>) => void
+  onUngroup: () => void
+}) {
+  return (
+    <>
+      <LabelField label={data.label} onChange={(label) => onChange({ label })} />
+      <Field label="Color">
+        <div role="group" aria-label="Color" className="flex gap-2">
+          {GROUP_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              aria-label={color}
+              aria-pressed={color === data.color}
+              className={cn(
+                "h-6 w-6 cursor-pointer rounded-sm outline-offset-2",
+                GROUP_STYLE[color].swatch,
+                color === data.color && "outline-2 outline-primary"
+              )}
+              onClick={() => onChange({ color })}
+            />
+          ))}
+        </div>
+      </Field>
+      <div className="flex flex-col gap-1.5">
+        <Button type="button" variant="outline" onClick={onUngroup}>
+          Ungroup
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Dissolve the box (keeps the nodes)
+        </p>
+      </div>
+    </>
+  )
+}
+
+function GroupBody({
+  node,
+  onChange,
+  onUngroup,
+}: {
+  node: BoardNode
+  onChange: (patch: Partial<GroupNodeData>) => void
+  onUngroup: () => void
+}) {
+  const parsed = groupNodeDataSchema.safeParse(node.data)
+  if (!parsed.success) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        This box&apos;s data is invalid, so it can&apos;t be edited.
+      </p>
+    )
+  }
+  // Keyed by id so the label draft never carries over between boxes.
+  return (
+    <GroupFields
+      key={node.id}
+      data={parsed.data}
+      onChange={onChange}
+      onUngroup={onUngroup}
+    />
+  )
+}
+
 function PanelTitle({ selection }: { selection: PropertyPanelSelection }) {
   if (selection.kind === "edge") {
     return <span>Edge</span>
+  }
+  if (selection.kind === "group") {
+    const parsed = groupNodeDataSchema.safeParse(selection.node.data)
+    const color = parsed.success ? parsed.data.color : "slate"
+    return (
+      <span className="flex items-center gap-2">
+        <Boxes
+          className={cn("h-4 w-4", GROUP_STYLE[color].icon)}
+          strokeWidth={1.5}
+        />
+        Group
+      </span>
+    )
   }
   const parsed = smartNodeDataSchema.safeParse(selection.node.data)
   if (!parsed.success) return <span>Node</span>
@@ -253,6 +359,8 @@ export function PropertyPanel({
   selection,
   onEdgeDataChange,
   onNodeDataChange,
+  onGroupDataChange,
+  onUngroup,
   onClose,
 }: PropertyPanelProps) {
   return (
@@ -275,14 +383,22 @@ export function PropertyPanel({
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-4 p-4">
-          {selection.kind === "edge" ? (
+          {selection.kind === "edge" && (
             <EdgeFields
               key={selection.edge.id}
               edge={selection.edge}
               onChange={onEdgeDataChange}
             />
-          ) : (
+          )}
+          {selection.kind === "node" && (
             <NodeBody node={selection.node} onChange={onNodeDataChange} />
+          )}
+          {selection.kind === "group" && (
+            <GroupBody
+              node={selection.node}
+              onChange={onGroupDataChange}
+              onUngroup={onUngroup}
+            />
           )}
         </div>
       </ScrollArea>

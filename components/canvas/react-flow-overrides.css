@@ -10,3 +10,18 @@
   --xy-connectionline-stroke: var(--accent-primary);
   --xy-selection-border: 1px solid var(--accent-primary);
 }
+
+/*
+ * React Flow styles every node of type "group" as a padded, bordered, grey
+ * panel. Bounding boxes draw their own border, fill and selection state, so
+ * strip the built-in look; otherwise a grey slab sits around the dashed box and
+ * the handles and resize lines land away from its visible edge.
+ */
+.react-flow .react-flow__node-group {
+  --xy-node-group-background-color: transparent;
+  --xy-node-border: none;
+  --xy-node-boxshadow-hover: none;
+  --xy-node-boxshadow-selected: none;
+  padding: 0;
+  border-radius: 0;
+}

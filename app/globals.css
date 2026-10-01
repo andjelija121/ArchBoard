@@ -24,6 +24,16 @@
     --color-node-queue-bg: var(--node-queue-bg);
     --color-node-database: var(--node-database);
     --color-node-database-bg: var(--node-database-bg);
+    --color-group-slate: var(--group-slate);
+    --color-group-slate-bg: var(--group-slate-bg);
+    --color-group-cyan: var(--group-cyan);
+    --color-group-cyan-bg: var(--group-cyan-bg);
+    --color-group-amber: var(--group-amber);
+    --color-group-amber-bg: var(--group-amber-bg);
+    --color-group-green: var(--group-green);
+    --color-group-green-bg: var(--group-green-bg);
+    --color-group-purple: var(--group-purple);
+    --color-group-purple-bg: var(--group-purple-bg);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -94,6 +104,18 @@
     --node-queue-bg: #a855f726;
     --node-database-bg: #3b82f626;
 
+    /* Bounding-box palette: canvas-only, separate from --node-* */
+    --group-slate: #94a3b8;
+    --group-cyan: #22d3ee;
+    --group-amber: #f59e0b;
+    --group-green: #10b981;
+    --group-purple: #a855f7;
+    --group-slate-bg: #94a3b814;
+    --group-cyan-bg: #22d3ee14;
+    --group-amber-bg: #f59e0b14;
+    --group-green-bg: #10b98114;
+    --group-purple-bg: #a855f714;
+
     --background: var(--bg-base);
     --foreground: var(--text-primary);
     --card: var(--bg-surface);
@@ -141,6 +163,18 @@
     --node-cache-bg: #ef444426;
     --node-queue-bg: #a855f726;
     --node-database-bg: #3b82f626;
+
+    /* Bounding-box palette: canvas-only, separate from --node-* */
+    --group-slate: #94a3b8;
+    --group-cyan: #22d3ee;
+    --group-amber: #f59e0b;
+    --group-green: #10b981;
+    --group-purple: #a855f7;
+    --group-slate-bg: #94a3b814;
+    --group-cyan-bg: #22d3ee14;
+    --group-amber-bg: #f59e0b14;
+    --group-green-bg: #10b98114;
+    --group-purple-bg: #a855f714;
 
     --background: var(--bg-base);
     --foreground: var(--text-primary);

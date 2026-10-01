@@ -48,6 +48,18 @@ These colors identify infrastructure types on the React Flow canvas. They must *
 
 Each node color additionally has a `-bg` variant at ~15% opacity for node fills (e.g., `--node-database-bg`) and is used at full opacity for borders, icons, and category badges.
 
+### Bounding Box Palette (canvas-only)
+
+Bounding boxes (Unit 10) use their own `--group-*` tokens so the `--node-*` palette stays reserved for smart nodes. Like the node palette, they are used only inside `components/canvas/`, never in chrome. Each has a `-bg` variant at ~8% opacity for the box fill.
+
+| Key    | CSS Variable     | Value     |
+| ------ | ---------------- | --------- |
+| slate (default) | `--group-slate`  | `#94a3b8` |
+| cyan   | `--group-cyan`   | `#22d3ee` |
+| amber  | `--group-amber`  | `#f59e0b` |
+| green  | `--group-green`  | `#10b981` |
+| purple | `--group-purple` | `#a855f7` |
+
 ## Typography
 
 Using [IBM Plex Sans](https://www.ibm.com/plex/) for UI (engineered/industrial character, distinct from the Geist ubiquity) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) for code, API routes, and edge protocol labels (superior character disambiguation for `0/O`, `1/l/I`).
@@ -86,7 +98,7 @@ shadcn/ui on top of Tailwind CSS v4. Components live in `components/ui/` and are
 
 ## Layout Patterns
 
-- **Editor view (board open):** full-viewport layout — top bar (board title, share button, save status) with bottom border, center React Flow canvas (`--bg-base`), right-anchored AI chat sidebar (`--bg-surface`) with left border separator. A shared property panel slides in from the right over the canvas when an edge or node is selected (edges: protocol, sync/async, API route, load; nodes: label, sub-label).
+- **Editor view (board open):** full-viewport layout — top bar (board title, share button, save status) with bottom border, center React Flow canvas (`--bg-base`), right-anchored AI chat sidebar (`--bg-surface`) with left border separator. A shared property panel slides in from the right over the canvas when an edge, node or bounding box is selected (edges: protocol, sync/async, API route, load; nodes: label, sub-label; boxes: label, color, ungroup).
 - **Sidebars:** fixed width (chat sidebar: 360px), full-height, single-border separator against canvas — no shadows.
 - **Modals:** centered overlay on `--bg-elevated` with backdrop blur (`backdrop-blur-sm`) over a semi-transparent scrim; `rounded-lg`.
 - **Top bar:** 48px height, `--bg-surface`, bottom border only — no shadow.
