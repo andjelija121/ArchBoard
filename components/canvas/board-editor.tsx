@@ -47,6 +47,7 @@ import {
   type BoardEdge,
   type BoardNode,
   type CanvasSnapshot,
+  type GeneratedResult,
   type GroupNodeData,
   type NodeCategory,
   type SmartNodeData,
@@ -171,7 +172,7 @@ function BoardEditorInner({
   const [groupableIds, setGroupableIds] = React.useState<string[]>([])
   const [status, setStatus] = React.useState<SaveStatusValue>("clean")
   const [saveError, setSaveError] = React.useState<string | null>(null)
-  const ai = useAiSidebar()
+
   const [isPending, startTransition] = React.useTransition()
   // Bumped on every real edit so a save can tell if edits landed mid-flight.
   const editVersion = React.useRef(0)
@@ -188,6 +189,60 @@ function BoardEditorInner({
     editVersion.current += 1
     setStatus("dirty")
   }
+
+  const handleSpawnResult = React.useCallback(
+    (result: GeneratedResult) => {
+      setNodes((current) => {
+        const working = [...current]
+        const createdNodes: BoardNode[] = []
+
+        for (const g of result.nodes) {
+          const position = nextLanePosition(g.category, working)
+          const node: BoardNode = {
+            id: createNodeId(),
+            type: g.category,
+            position,
+            data: { category: g.category, label: g.label, subLabel: g.subLabel },
+          }
+          working.push(node)
+          createdNodes.push(node)
+        }
+
+        const createdGroups: BoardNode[] = []
+        if (result.groups && result.groups.length > 0) {
+          for (const g of result.groups) {
+            const memberNodes = g.nodeIndices
+              .filter((i) => i < createdNodes.length)
+              .map((i) => createdNodes[i])
+            if (memberNodes.length < 1) continue
+
+            const bounds = computeGroupBounds(memberNodes)
+            const groupNode: BoardNode = {
+              id: createGroupId(),
+              type: GROUP_NODE_TYPE,
+              position: { x: bounds.x, y: bounds.y },
+              width: bounds.width,
+              height: bounds.height,
+              zIndex: GROUP_Z_INDEX,
+              data: {
+                label: g.label,
+                color: g.color ?? DEFAULT_GROUP_COLOR,
+                childIds: memberNodes.map((m) => m.id),
+              } satisfies GroupNodeData,
+            }
+            createdGroups.push(groupNode)
+            working.push(groupNode)
+          }
+        }
+
+        return [...current, ...createdGroups, ...createdNodes]
+      })
+      markDirty()
+    },
+    [setNodes],
+  )
+
+  const ai = useAiSidebar({ projectId, onSpawn: handleSpawnResult })
 
   // Pans the minimum distance needed to bring a measured node fully on screen.
   const revealNode = (
