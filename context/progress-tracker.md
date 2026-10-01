@@ -5,13 +5,42 @@ change.
 
 ## Current Phase
 
+- Unit 13 (Liveblocks multiplayer) implemented: the board canvas now reads and writes Liveblocks Storage and shows live cursors. Code complete, `tsc`, eslint on the new files and `npm run build` pass. **Needs `LIVEBLOCKS_SECRET_KEY` in `.env.local` (an empty placeholder was added) and two browser windows to verify.**
 - Unit 12 (AI generation backend) implemented with Trigger.dev + Groq (Server Action enqueues, task calls Groq, client follows the run via `useRealtimeRun`). AI generates both nodes AND groups (bounding boxes). Code complete, `tsc` and `npm run build` pass. End-to-end browser testing needs a live Clerk session + the Trigger.dev worker (`npx trigger.dev@4.7.0 dev`) + `GROQ_API_KEY`. Units 09–11 also awaiting browser verification.
 
 ## Current Goal
 
+- Set `LIVEBLOCKS_SECRET_KEY`, then browser-verify Unit 13 with two windows on the same board.
 - Browser-verify Units 09–12 (needs a live Clerk session + `npx trigger.dev@4.7.0 dev` + `GROQ_API_KEY`).
 
 ## Completed
+
+- **Unit 13: Liveblocks multiplayer (`context/feature-specs/13-liveblocks-multiplayer.md`).** The board canvas now syncs through Liveblocks Storage (invariant #3) with live cursors.
+  - Deps: `@liveblocks/client`, `@liveblocks/react` (3.24.2). Env: `LIVEBLOCKS_SECRET_KEY` (empty placeholder appended to `.env.local`; the auth route returns a 500 with a log line until it is set).
+  - `liveblocks.config.ts` (root): client (`authEndpoint: /api/liveblocks-auth`), `Presence` / `Storage` / `UserMeta` types, and the typed **Suspense** hooks from `createRoomContext(...).suspense` so `useStorage` never returns null.
+  - `lib/liveblocks/types.ts`: `StoredNode` / `StoredEdge` (the React Flow element minus per-user fields).
+  - `lib/liveblocks/canvas-sync.ts`: pure helpers. `toStoredNode/Edge` strips `selected`, `measured`, `dragging`, `resizing` and `undefined`; `mergeNode/Edge` overlays local state on a stored element (WeakMap-cached, so unchanged nodes keep identity); `reconcileList` applies a whole-array update as a minimal diff (deletes, per-field `set`, inserts at index so a prepended box stays first); overlay reducers for React Flow changes.
+  - `lib/liveblocks/use-live-canvas.ts`: `useLiveCanvas({ onMutate })` returns `nodes`, `edges`, `onNodesChange`, `onEdgesChange`, `setNodes`, `setEdges`, `addEdge`. Storage holds the elements; selection, measured size and drag/resize flags stay in a local overlay (per user). Position changes `set` one field; only a `setAttributes` resize persists width/height; remove/add/replace map to the `LiveList`. `setNodes`/`setEdges` take an array or an updater and run inside one mutation, derived from Storage as it is now. `addEdge` skips an identical connection.
+  - `lib/liveblocks/use-live-cursors.ts`: broadcasts the pointer in flow space (`screenToFlowPosition`), sets `name` and `color` in presence on mount. Color is picked round-robin by `connectionId` from `--group-slate/cyan/amber/green/purple` + `--accent-primary`, stored in presence as the CSS `var(...)` string.
+  - `components/canvas/cursors.tsx`: `Cursors` reads `useOthersConnectionIds` and renders one `Cursor` per other user (so a cursor moving doesn't re-render the rest), `pointer-events-none z-30`, name pill, counter-scaled by `1/zoom`.
+  - `lib/liveblocks/room-provider.tsx`: `LiveRoom` = `RoomProvider` (`initialStorage` as a function, seeded from the Postgres snapshot only if the room is empty) + an error boundary + `ClientSideSuspense` with a "Connecting…" fallback. A failed auth/connection shows "Couldn't connect to the live session. Reload to try again." instead of crashing.
+  - `app/api/liveblocks-auth/route.ts`: Clerk `auth()` (401), Zod-validated `{ room }` (400), owner-scoped Prisma check (403), then `POST https://api.liveblocks.io/v2/authorize-user` with `{ userId, userInfo: { name }, permissions: { [room]: ["room:write"] } }` and the Clerk first name (fallback "User").
+  - `components/canvas/board-editor.tsx`: `BoardEditor` wraps `LiveRoom` > `ReactFlowProvider`. `useNodesState`/`useEdgesState` and the manual `markDirty()` calls are gone. `onConnect` calls the hook's `addEdge`. Pointer handlers go to `BoardCanvas`, which renders `<Cursors />` as a child. Save still sends `{ nodes, edges }` to the same `saveCanvas` action.
+  - `components/canvas/board-canvas.tsx`: `onPointerMove` / `onPointerLeave` on the wrapper, plus `children`.
+  - **Dirty tracking changed:** it now keys off Storage changes (the `onMutate` callback fires when the stored arrays change), not off React Flow change types. Selection and measurement never touch Storage, so they still don't dirty the board, and **another client's edits now mark this window Unsaved too**, so Save is available in either window.
+  - Deviations from the spec text:
+    - Auth uses `POST /v2/authorize-user` (permissions map in the body). The spec's `/v2/rooms/{roomId}/authorize` doesn't exist; confirmed against the `@liveblocks/node` source.
+    - Cursors render through React Flow's `ViewportPortal`. Plain children of `<ReactFlow>` sit outside the pan/zoom transform, so they wouldn't follow the viewport.
+    - Suspense hooks instead of the classic ones; `useOthersConnectionIds` + `useOther` instead of `useOthers`, to avoid re-rendering every cursor on any presence change.
+    - `initialStorage` is a function, so the `LiveObject`s aren't rebuilt on every render.
+    - Cursor colors are CSS token strings, not hex, per the no-hardcoded-hex rule.
+  - Verified: `tsc --noEmit`, eslint on the changed folders and `npm run build` pass. A `tsx` script exercised `reconcileList` / overlay helpers on detached `LiveList`s (order after prepend + delete, field-level patch, local fields never stored, nested `undefined` stripped, overlay identity preserved).
+  - **Not verified:** nothing ran against a real Liveblocks room (no secret key here, and it needs a Clerk session). By hand: the whole "Verify when done" list in the spec, especially two windows on one board (add/move/delete node, draw/edit edge, rename, group + group drag, AI spawn), cursor + name label appears and disappears, Save from either window then reload, a second window joining gets the live state, and a clean console.
+  - Known gaps / follow-ups:
+    - The first cursor color (`--group-cyan`) and the sixth (`--accent-primary`) are the same hex (`#22d3ee`), so two participants can look identical. The spec asks for exactly this palette; swap the sixth if it matters.
+    - Liveblocks keeps room Storage after everyone leaves, so a rejoin shows the last live state (including unsaved edits), not the Postgres snapshot. A window joining a room whose live state differs from the DB still shows "Saved" until it edits. Fits Unit 15 (autosave) / Unit 16.
+    - `data` is stored as one JSON value per element, so two clients editing different fields of the same node/edge at the same instant resolve last-write-wins on the whole `data`.
+    - Guests (Unit 14) get `name: "Guest"` once the auth route issues them tokens; the route is owner-only today.
 
 - **Fix: hydration mismatch on Clerk `UserButton` (`editor-navbar.tsx`).** Clerk's `withClerk` wrapper returns `null` until clerk-js has loaded. The server never has it loaded, but on the client clerk-js can finish before hydration, so the first client render added a `<div data-clerk-component="UserButton">` the server didn't send. It's a timing race, so it appears intermittently. `UserButton` now renders through `ClientUserButton`, which shows a same-size (`size-7`) placeholder until after hydration (`useSyncExternalStore` client flag, no effect). `tsc` and eslint pass; not re-checked in a browser.
 
@@ -231,8 +260,8 @@ change.
 
 ## Next Up
 
-- Browser-verify Units 09, 10 and 11 (checklists in their entries above and in `09-annotated-edges.md` / `10-bounding-boxes.md` / `11-ai-sidebar.md`).
-- Write Unit 12 spec and implement (Trigger.dev + Gemini backend + node spawning).
+- Browser-verify Unit 13 (two windows, see its entry), then Units 09, 10 and 11 (checklists in their entries above and in `09-annotated-edges.md` / `10-bounding-boxes.md` / `11-ai-sidebar.md`).
+- Unit 14: guest share links (extends `app/api/liveblocks-auth/route.ts` and the board route).
 
 ## Open Questions
 

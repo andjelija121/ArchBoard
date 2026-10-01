@@ -37,6 +37,10 @@ interface BoardCanvasProps {
   onNodeDragStart: OnNodeDrag<BoardNode>
   onNodeDrag: OnNodeDrag<BoardNode>
   onNodeDragStop: OnNodeDrag<BoardNode>
+  onPointerMove: React.PointerEventHandler<HTMLDivElement>
+  onPointerLeave: React.PointerEventHandler<HTMLDivElement>
+  /** Rendered inside the viewport, e.g. the live cursor overlay. */
+  children?: React.ReactNode
 }
 
 // Edges drawn by dragging between handles render as annotated edges.
@@ -59,9 +63,16 @@ export function BoardCanvas({
   onNodeDragStart,
   onNodeDrag,
   onNodeDragStop,
+  onPointerMove,
+  onPointerLeave,
+  children,
 }: BoardCanvasProps) {
   return (
-    <div className="h-full w-full">
+    <div
+      className="h-full w-full"
+      onPointerMove={onPointerMove}
+      onPointerLeave={onPointerLeave}
+    >
       <EdgeClickContext.Provider value={onEdgeClick}>
         <ReactFlow
           nodes={nodes}
@@ -88,6 +99,7 @@ export function BoardCanvas({
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
           <Controls />
+          {children}
         </ReactFlow>
       </EdgeClickContext.Provider>
     </div>
