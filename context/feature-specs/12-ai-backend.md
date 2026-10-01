@@ -120,8 +120,12 @@ nobody picks up (worker not running) expire instead of pending forever.
 ### 4. `components/ai/use-ai-sidebar.ts` — realtime subscription
 
 `submit` calls the action; on `ok` it stores the run (ref + state) and
-the pending message stays pending. `useRealtimeRun` follows the run and
-`onComplete` settles it, once (`finish` is a no-op after the first call):
+the pending message stays pending. `useRealtimeRun` follows the run
+(cache key `id` = the run ID, so runs never share cached state). One
+`settleRun` handler settles it, fed by `onComplete`, by the hook's
+reactive `run`, and by its `error` (an effect), because `onComplete`
+alone isn't guaranteed to fire. It ignores any run that isn't the active
+one, and `finish` is a no-op after the first call:
 
 - `COMPLETED`: `run.output` is validated again (`ok: true` → `onSpawn(result)`
   and success message; `ok: false` → that message as an error).

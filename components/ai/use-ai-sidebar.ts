@@ -23,6 +23,13 @@ interface ActiveRun {
   assistantId: string
 }
 
+// The slice of a realtime run that settlement reads.
+interface TrackedRun {
+  id: string
+  status: string
+  output?: unknown
+}
+
 // Validated here, not trusted: this is the boundary where task output enters
 // the client before it is allowed to spawn anything on the canvas.
 const taskOutputSchema = z.discriminatedUnion("ok", [
@@ -137,19 +144,21 @@ export function useAiSidebar(options: UseAiSidebarOptions): UseAiSidebar {
     [],
   )
 
-  useRealtimeRun<typeof generateInfraTask>(activeRun?.runId, {
-    accessToken: activeRun?.accessToken,
-    enabled: activeRun !== null,
-    onComplete: (run, err) => {
+  // The one place a run is settled. onComplete, the hook's reactive run state
+  // and its subscription error all route here, so none of them can be missed
+  // (onComplete alone isn't guaranteed to fire). A run that isn't the active
+  // one, or is already settled, is ignored.
+  const settleRun = useCallback(
+    (run: TrackedRun | undefined, err?: Error) => {
       const current = activeRunRef.current
-      if (!current || run.id !== current.runId) return
+      if (!current || (run && run.id !== current.runId)) return
 
       if (err) {
         console.error("useAiSidebar: realtime subscription failed", err)
         finish({ status: "error", content: SUBSCRIPTION_ERROR })
         return
       }
-      if (!TERMINAL_STATUSES.has(run.status)) return
+      if (!run || !TERMINAL_STATUSES.has(run.status)) return
 
       if (run.status === "COMPLETED") {
         const output = taskOutputSchema.safeParse(run.output)
@@ -178,7 +187,24 @@ export function useAiSidebar(options: UseAiSidebarOptions): UseAiSidebar {
               : GENERIC_ERROR,
       })
     },
+    [finish],
+  )
+
+  // `id` is the hook's cache key: one per run, so a later run never starts
+  // from the previous run's cached state.
+  const { run: liveRun, error: liveError } = useRealtimeRun<
+    typeof generateInfraTask
+  >(activeRun?.runId, {
+    id: activeRun?.runId,
+    accessToken: activeRun?.accessToken,
+    enabled: activeRun !== null,
+    onComplete: settleRun,
   })
+
+  useEffect(() => {
+    if (!activeRun) return
+    settleRun(liveRun, liveError)
+  }, [activeRun, liveRun, liveError, settleRun])
 
   const submit = useCallback(
     async (prompt?: string) => {
