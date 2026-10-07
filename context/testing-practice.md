@@ -56,7 +56,7 @@ Practice rollout by deploying a second image and watching `kubectl rollout statu
 
 [Kubernetes probe instructions](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/), [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/), [GitHub Actions quick start](https://docs.github.com/en/actions/writing-workflows/quickstart).
 
-Docker, Kubernetes manifests, GitHub workflows, component tests and browser tests are future exercises, not implemented in this step.
+Docker is covered by the separate [container-packaging step](docker-practice.md). Kubernetes manifests, GitHub workflows, component tests and browser tests remain future exercises, not implemented in the testing-foundation step.
 
 ## Verified results
 - All ten tests pass.

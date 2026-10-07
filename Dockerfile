@@ -13,7 +13,7 @@ COPY . .
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 # These commands need a URL to load the Prisma config, not a live database.
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate
-RUN test -n "$pk_test_Y29tcGxldGUtYW50ZWF0ZXItNzAyNS5jbGVyay5hY2NvdW50cy5kZXYk" && \
+RUN test -n "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" && \
     mkdir -p public && \
     DATABASE_URL=postgresql://build:build@localhost:5432/build npm run build
 

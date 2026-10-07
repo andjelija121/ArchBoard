@@ -28,7 +28,7 @@ Docker was not found in the terminal when these files were added; a Docker build
 | `COPY . .` | Copies the build context into /app, excluding .dockerignore entries. |
 | `ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Accepts the public Clerk key at build time. Next.js embeds public browser variables into the build, so changing this key requires rebuilding. ARG is not a safe place for private secrets. |
 | `RUN DATABASE_URL=... npx prisma generate` | Generates the Prisma client from the schema. The fake URL lets prisma.config.ts load; generation does not create tables or connect to a database. The URL exists only for that command. |
-| `test -n ...` | Fails early if the public Clerk build argument was omitted. |
+| `test -n "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"` | Checks that the declared public Clerk build argument is non-empty before building; an omitted or empty argument stops the build. This checks presence, not key validity. |
 | `mkdir -p public` | Creates an empty public folder if absent, so copying assets later works whether or not you add public assets. |
 | `DATABASE_URL=... npm run build` | Compiles the production app. Imported database code needs a URL even during compilation. No real database credentials are placed in the image. If future static pages query the database during build, this setup must be reconsidered. |
 | `&&` and backslash | In this Dockerfile's Linux shell, && runs the next command only after success; backslash continues a line. These are not PowerShell continuation instructions. |

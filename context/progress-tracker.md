@@ -351,14 +351,16 @@ change.
 - Verified: production build (including TypeScript) and all ten tests pass; unauthenticated production HTTP request returns 200, {"status":"ok"}, and Cache-Control: no-store.
 
 ## DevOps step 3: Docker
-- Added multi-stage Dockerfile, .dockerignore, standalone Next.js output and context/docker-practice.md. Docker CLI is unavailable in the current terminal; actual container verification awaits Docker Desktop. Local standalone build verification pending.
+- Added multi-stage Dockerfile, .dockerignore, standalone Next.js output and context/docker-practice.md. Docker Desktop startup was resolved; the user built and ran the image.
 
-- Verified: local production build and TypeScript pass; .next/standalone/server.js exists. Docker image build and container smoke test remain unverified because Docker is not installed/available.
+- Verified: local production build and TypeScript pass; .next/standalone/server.js exists. The user confirmed the Docker-hosted site works after container recreation with .env.docker. Explicit container health, sign-in, and save checks remain pending.
 
 ## CI/CD roadmap
 - Added context/cicd-checklist.md with the original nine-step plan, verified completion checkboxes, partial testing/Docker status, deployment secrets, and links. No registry, Kubernetes or GitHub workflow setup has been verified yet.
 
 
-- Docker startup reported successful by user, but editor failed with Prisma P1001. Found quoted DATABASE_URL in .env.local; created ignored .env.docker with wrapping quotes removed. Container recreation and connection verification pending.
+- Docker startup reported successful by user, but editor failed with Prisma P1001. Found quoted DATABASE_URL in .env.local; created ignored .env.docker with wrapping quotes removed. Container recreation with .env.docker resolved the connection error, as confirmed by the user; explicit health, sign-in, and save checks remain pending.
 
 - User confirmed the Docker-hosted site works after recreating the container with .env.docker. Updated CI/CD checklist; explicit health/sign-in/save smoke checks remain pending.
+
+- Review fixes: corrected the Docker Clerk build-argument presence check and synchronized container status and testing-scope documentation.
