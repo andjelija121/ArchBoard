@@ -5,6 +5,7 @@ change.
 
 ## Current Phase
 
+- Unit 16 (guest disconnect / AI failure fallback hardening) implemented: a Liveblocks reconnect/lost banner over the still-interactive canvas, an AI-failure stall watchdog, and an audited (no-op) save-failure path. `tsc`, eslint on the changed files and `npm run build` pass. **Needs a live Liveblocks session to browser-verify the banner states (kill/restore the network) and a running Trigger.dev worker to verify the AI error paths.**
 - Unit 15 (persistence integration — debounced autosave) implemented: the save lifecycle (debounce timer, in-flight guard, status machine) is extracted into `components/canvas/use-autosave.ts` and drives the existing navbar save-status indicator and Save button. Editing and pausing ~2s flushes to Postgres with no click; manual Save is an immediate flush. `tsc`, eslint and `npm run build` pass. **Needs a live Clerk session + `LIVEBLOCKS_SECRET_KEY` to verify the autosave cadence and two-window owner/guest path in a browser.**
 - Unit 14 (revocable share links) implemented: owner Share dialog, public `/share/[token]` guest route, guest branch in the Liveblocks auth endpoint, `access` prop on `BoardEditor`. Code complete; `tsc`, eslint and `npm run build` pass. **Needs two browser windows (owner + incognito) and a Liveblocks secret key to verify end to end.**
 - Unit 13 (Liveblocks multiplayer) implemented: the board canvas now reads and writes Liveblocks Storage and shows live cursors. Code complete, `tsc`, eslint on the new files and `npm run build` pass. **Needs `LIVEBLOCKS_SECRET_KEY` in `.env.local` (an empty placeholder was added) and two browser windows to verify.**
@@ -12,12 +13,23 @@ change.
 
 ## Current Goal
 
+- Browser-verify Unit 16 hardening: kill/restore the network with a board open → "Reconnecting…" then a cleared banner (optionally flashing "Reconnected"), queued edits replaying, and a prolonged drop showing the "Connection lost" + Reload banner; confirm a guest window shows the banner too; confirm a hard connect failure still shows the `RoomErrorBoundary`; with the Trigger.dev worker stopped, an AI prompt ends in a retryable error (not a forever spinner) and Retry re-enables the composer.
 - Browser-verify Unit 15 autosave: edit + pause ~2s settles `Unsaved → Saving… → Saved` with no click; a long drag debounces to one flush; manual Save flushes immediately; an edit mid-flush stays `Unsaved`; reload shows the last autosaved state; a guest's edit (second window) flips the owner's indicator and autosaves; guest windows show no Save/status; a forced `saveCanvas` failure surfaces `Save failed` and a later autosave clears it.
 - Browser-verify Unit 14 (owner window + incognito guest, both link roles, revoke).
 - Set `LIVEBLOCKS_SECRET_KEY`, then browser-verify Unit 13 with two windows on the same board.
 - Browser-verify Units 09–12 (needs a live Clerk session + `npx trigger.dev@4.7.0 dev` + `GROQ_API_KEY`).
 
 ## Completed
+
+- **Unit 16: guest disconnect / AI failure fallback hardening (`context/feature-specs/16-failure-hardening.md`).** One consolidated pass over the two external-failure paths named in `code-standards.md` — Liveblocks drops and AI generation failures — plus a save-failure audit. No new tokens; reuses `--state-error/warning/success` and the established `RoomMessage`/`SaveStatus` visual language.
+  - `lib/liveblocks/use-connection-status.ts` (new, `"use client"`): `useConnectionStatus()` wraps the exported Suspense `useStatus` into the spec's `ConnectionBanner` union (`ok | reconnecting | lost | reconnected`). Maps `connecting`/`reconnecting` → `reconnecting`, `disconnected` → `lost`, `connected` → `ok`; on a return to `connected` after a disruption it emits a transient `reconnected` for ~2s. `initial` → `ok` (the `LiveRoom` Suspense fallback owns first connect).
+    - Deviation from the spec text (same behavior, different mechanism): the spec sketched the transition tracking inside a `useEffect` with timers. The project's `react-hooks/set-state-in-effect` eslint rule forbids a synchronous `setState` in an effect, so transitions are detected **during render** via a `prevStatus` compare (React's sanctioned derived-from-changed-value pattern), and the only effect just runs the 2s auto-clear timer whose `setState` lives in the timer callback. An intermediate `connecting` on the way back preserves the "was disrupted" flag so the `reconnected` flash isn't missed when Liveblocks goes `reconnecting → connecting → connected`.
+  - `components/canvas/connection-banner.tsx` (new, `"use client"`): presentational; takes the `ConnectionBanner` value, renders `null` for `ok`. Pinned `absolute inset-x-0 top-0 z-40`, `pointer-events-none` except the Reload button in the `lost` state (`pointer-events-auto`). `reconnecting` = `--state-warning` tinted bar, `Loader2` spinner + "Reconnecting…", `role="status"`. `lost` = `--state-error` bar, `AlertCircle` + "Connection lost. Your recent changes may not be saved." + a **Reload** button (`window.location.reload()`), `role="alert"`. `reconnected` = subtle `--state-success` bar, `CheckCircle2` + "Reconnected", `role="status"`. Icons `h-4 w-4`, `strokeWidth={1.5}`. Colors via the mapped state tokens with opacity modifiers (`bg-state-warning/15`, `border-state-error/40`, …) — no hardcoded hex.
+  - `components/canvas/board-editor.tsx`: calls `useConnectionStatus()` in `BoardEditorInner` and mounts `<ConnectionBanner>` inside the canvas `flex-1` wrapper, so it shows for **both** owner and guest modes (a guest's connection can drop too). Because `BoardEditorInner` only renders inside `LiveRoom`'s `ClientSideSuspense` (i.e. after Storage loads), the banner and the `RoomErrorBoundary` never double-render (§5): the boundary still handles *never connecting*; the banner handles drops *after* a join. `RoomErrorBoundary`/`room-provider.tsx` unchanged.
+  - `components/ai/use-ai-sidebar.ts` (§3 gap closed): added a client-side **stall watchdog**. When a run is active, a `STALL_TIMEOUT_MS` (100s, just past the 90s enqueue TTL) timer is armed and re-armed on every `liveRun?.status` change; if it fires (no status update — e.g. the SSE stream silently stalls *after* the run started executing, which the TTL→EXPIRED path does not cover) it settles the pending message as an error ("Generation stalled. Please retry.") via `finish`, which clears `isSending` so Retry works. Cleared on settle/unmount by the effect cleanup. The rest of §3 was an audit with no change: the Unit 12 `settleRun` already routes enqueue failure, EXPIRED, TIMED_OUT, FAILED/CRASHED/other terminal, subscription error, invalid/zod-rejected output and explicit refusal (`{ ok: false, error }`) to the error bubble + Retry, and every terminal/error path clears `isSending`. Append-only is unchanged (spawn only on validated `COMPLETED` output). No backend change.
+  - §4 save-failure surfacing — **audit only, no-op** as the spec predicted: `use-autosave.ts`'s `flush` runs both the debounce and the manual `saveNow` through one status machine, so an autosave failure is as visible as a manual one (`status: "error"` + message in `SaveStatus`'s `title`); after `error`, `saveNow` stays enabled (it only no-ops on `clean`/`saved`) and `markDirty` restarts the debounce, so both paths retry; `saveCanvas` logs server-side and returns a generic client message — no silent swallow.
+  - Verified: `tsc --noEmit`, eslint on the changed files and `npm run build` pass with zero errors.
+  - **Not verified:** no browser run. By hand, the spec's "Verify when done" list: kill the network → "Reconnecting…" warning banner, canvas not frozen-crashed; restore → queued edits replay, banner clears (optionally flashing "Reconnected"); a prolonged disconnect → `--state-error` "Connection lost" banner + working Reload; a hard auth/connection failure still shows the full `RoomErrorBoundary` (not the banner); with the Trigger.dev worker stopped, a prompt ends in a clear retryable error after the TTL (not a forever spinner); an explicit refusal shows the friendly text + Retry; Retry after any error re-enables the composer and works; a failed generation spawns nothing; a forced `saveCanvas` failure shows "Save failed" and a later save clears it; a guest window also shows the banner on a drop; clean console; responsive at mobile/desktop.
 
 - **Unit 15: persistence integration — debounced autosave (`context/feature-specs/15-persistence-integration.md`).** Closes the storage loop so collaborative edits persist without a manual click. No new UI surface — the existing save-status indicator and Save button are now honest about autosave.
   - `components/canvas/use-autosave.ts` (new, `"use client"`): `useAutosave({ projectId, getSnapshot, enabled, delayMs? })` returns `{ status, error, markDirty, saveNow }` and owns the debounce timer, the in-flight guard, and the `clean | dirty | saving | saved | error` machine. `SaveStatusValue` is now exported from here (was a local type in `board-editor.tsx`).
@@ -328,3 +340,27 @@ change.
 ## Session Notes
 
 - `components/ui/*` are generated primitives — do not hand-edit them (see `ai-workflow-rules.md` protected files); extend via wrapper components in `components/canvas/` or `components/ai/` when those features are built.
+
+## Testing foundation
+- Added Vitest configuration, ten canvas synchronization tests, npm test/watch/typecheck scripts, and context/testing-practice.md. Verification results are recorded in the testing guide after execution.
+- Testing foundation verified: ten tests pass, TypeScript passes, and production build passes.
+
+## DevOps step 2: health endpoint
+- Added GET /api/health with a non-cached HTTP 200 response and excluded its exact path from both Clerk proxy matchers. Verification pending.
+
+- Verified: production build (including TypeScript) and all ten tests pass; unauthenticated production HTTP request returns 200, {"status":"ok"}, and Cache-Control: no-store.
+
+## DevOps step 3: Docker
+- Added multi-stage Dockerfile, .dockerignore, standalone Next.js output and context/docker-practice.md. Docker Desktop startup was resolved; the user built and ran the image.
+
+- Verified: local production build and TypeScript pass; .next/standalone/server.js exists. The user confirmed the Docker-hosted site works after container recreation with .env.docker. Explicit container health, sign-in, and save checks remain pending.
+
+## CI/CD roadmap
+- Added context/cicd-checklist.md with the original nine-step plan, verified completion checkboxes, partial testing/Docker status, deployment secrets, and links. No registry, Kubernetes or GitHub workflow setup has been verified yet.
+
+
+- Docker startup reported successful by user, but editor failed with Prisma P1001. Found quoted DATABASE_URL in .env.local; created ignored .env.docker with wrapping quotes removed. Container recreation with .env.docker resolved the connection error, as confirmed by the user; explicit health, sign-in, and save checks remain pending.
+
+- User confirmed the Docker-hosted site works after recreating the container with .env.docker. Updated CI/CD checklist; explicit health/sign-in/save smoke checks remain pending.
+
+- Review fixes: corrected the Docker Clerk build-argument presence check and synchronized container status and testing-scope documentation.
