@@ -45,3 +45,10 @@
 2. **Synchronous LLM Ban**: No direct, synchronous LLM network calls are permitted within Next.js API routes or Server Actions. All AI requests must be delegated to Trigger.dev to prevent Vercel serverless function timeouts.3. **Single Source of Truth (Active Session)**: During an active collaboration session, Liveblocks is the absolute source of truth for the canvas. The PostgreSQL database is only used for initial loading and persistent snapshot saving, never for real-time state calculation.
 4. **Denormalized Canvas State**: Canvas data (nodes and edges) must always be stored in the database as a single `JSONB` object payload. The codebase must never attempt to normalize canvas nodes and edges into separate SQL tables, as this would break the React Flow and Liveblocks syncing mechanisms.
 </content>
+
+## Operational health
+- GET /api/health is public, bypasses the Clerk proxy, and returns HTTP 200 with { status: ok } and Cache-Control: no-store. It checks that the Next.js process can serve a request; it does not check PostgreSQL or external providers.
+
+
+## Container packaging
+- The Dockerfile builds a Next.js standalone web image with Node 24 on Debian slim. Dependencies and Prisma client generation run in Linux build stages. Runtime credentials are supplied externally; migrations and Trigger.dev worker deployment remain separate.

@@ -27,9 +27,10 @@ export default clerkMiddleware((_auth, request) => {
   return response
 })
 
+// Health probes bypass Clerk; both matchers must exclude the exact health path.
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    "/((?!api/health/?$|_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/((?!api/health/?$)(?:api|trpc).*)",
   ],
 }

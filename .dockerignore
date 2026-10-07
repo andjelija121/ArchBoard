@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env*
+*.pem
+*.key
+*.tsbuildinfo
+lib/generated/prisma
+.trigger
+coverage
+.vitest
+npm-debug.log*
+.agents
+.claude
